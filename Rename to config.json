@@ -1,0 +1,11 @@
+{
+    "subreddit": "xxxxxxxxxxxxxxxx",
+    "client_id": "xxxxxxxxxxxxxxxxx",
+    "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "username": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "password": "xxxxxxxxxxxxxxxxxxxxxxxx",
+    "user_agent": "Reddit Scraper (by u/Allan_QuartermainSr)",
+    "post_sort": "controversial",
+    "notes": "You can choose from 'top', 'hot', 'new', 'rising', or 'controversial' for post sorting.",
+    "interaction_strategy": "karma_and_age"
+}

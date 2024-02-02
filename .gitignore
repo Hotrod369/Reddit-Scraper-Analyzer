@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Custom
+aiogram_env
+config.json
+
 # C extensions
 *.so
 
