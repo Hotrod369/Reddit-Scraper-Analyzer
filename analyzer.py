@@ -6,6 +6,8 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 import datetime as dt  # Add this line to import the datetime module
+from collections import defaultdict
+
 
 
 # Load data from JSON files
@@ -21,12 +23,22 @@ data = pd.DataFrame.from_dict(user_data, orient="index")
 # Define thresholds for bot characteristics
 KARMA_THRESHOLD = 5000
 ACCOUNT_AGE_THRESHOLD = 2  # years
-POSTING_FREQUENCY_THRESHOLD = 30  # Example threshold for unusual posting frequency
+
+# Assuming config is undefined or None
+config = None
+
+# Create a default dictionary with an empty string as the default value
+config = defaultdict(str) if config is None else config
+
+# Access the "notes" field with a default value
+notes = config.get("notes", "")
+if notes:
+    notes = " ".join(notes)
+    print("Note:", notes)
 
 # Create a DataFrame to store potential bot accounts and their criteria
 bot_df = pd.DataFrame(columns=["User", "Criteria", "Account Age", "Awardee Karma",
                                 "Link Karma", "Comment Karma", "Total Karma",
-                                "Number of Posts", "Number of Comments",
                                 "User is Contributor", "Has Verified Email", "Accepts Followers"])
 
 # Create a set to keep track of users already added to the DataFrame
@@ -44,17 +56,18 @@ try:
         has_verified_email = submission_info.get("has_verified_email", False)
         accept_followers = submission_info.get("accept_followers", False)
         
-        # Calculate the account age using created_utc
+        # Fetch the user's data from user_data
+        user_info = user_data.get(username, {})
+        if not user_info:
+            continue  # Skip if user data is not available
+        
+        # Calculate the account age using created_utc from user_data
+        account_creation_time = dt.datetime.utcfromtimestamp(user_info.get("created_utc", 0))
         current_time = dt.datetime.utcnow()
-        account_creation_time = dt.datetime.utcfromtimestamp(submission_info["created_utc"])
         account_age = (current_time - account_creation_time).days / 365.25
 
         # Check if the user exists in user_data
         if username in user_data:
-            # Access the "Posts" and "Comments" fields from user_data
-            number_of_posts = user_data[username].get("Posts", 0)
-            number_of_comments = user_data[username].get("Comments", 0)
-
             # Initialize the criteria list
             criteria_met = []
 
@@ -63,8 +76,6 @@ try:
                 criteria_met.append("Low Karma")
             if account_age <= ACCOUNT_AGE_THRESHOLD:
                 criteria_met.append("Young Account Age")
-            if number_of_posts >= POSTING_FREQUENCY_THRESHOLD:
-                criteria_met.append("Unusual Posting Frequency")
 
             # Check if the user has already been added to the DataFrame
             if username not in added_users:
@@ -77,8 +88,6 @@ try:
                     "Total Karma": total_karma,
                     "Account Age": account_age,
                     "Awardee Karma": awardee_karma,
-                    "Number of Posts": number_of_posts,
-                    "Number of Comments": number_of_comments,
                     "User is Contributor": user_is_contributor,
                     "Has Verified Email": has_verified_email,
                     "Accepts Followers": accept_followers
