@@ -6,6 +6,12 @@ __pycache__/
 # Custom
 aiogram_env
 config.json
+.devcontainer
+.vscode
+submission_data.json
+user_data.json
+potential_bot_accounts.py
+.ipynb_checkpoints
 
 # C extensions
 *.so
