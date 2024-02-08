@@ -10,7 +10,7 @@ config.json
 .vscode
 submission_data.json
 user_data.json
-potential_bot_accounts.py
+potential_bot_accounts.xlsx
 .ipynb_checkpoints
 
 # C extensions
