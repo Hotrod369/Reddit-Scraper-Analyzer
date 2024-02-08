@@ -2,166 +2,173 @@
 Scrapes top 100 users per karma in the last 3 months
 '''
 import json
-import time
 import datetime as dt
-import praw
-import pandas as pd
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter  # Import get_column_letter from openpyxl.utils
+import main
 
-def load_config():
-    """ Load configuration file """
+# Function to fetch user details from Reddit's API
+def fetch_user_info(reddit, username):
     try:
-        with open("config.json", "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError("The config file 'config.json' was not found. \
-            Please create it or check the path.") from exc
+        user = reddit.redditor(username)
+        user_data = {
+            'created_utc': user.created_utc
+            # Add other user details if needed
+        }
+        print(user.created_utc)
+        return user_data
+    except Exception as e:
+        print(f"Error fetching user info for {username}: {e}")
+        return None
+    
+if __name__ == "__main__":
+    config = main.load_config()  # Load the configuration from main module
+    reddit = main.login(config)  # Login using the config data
+    subreddit_name = config["subreddit"]
+    subreddit = reddit.subreddit(subreddit_name)
 
-    missing = set(["client_id", "client_secret", "subreddit", \
-        "username", "password"]) - set(config.keys())
-    if len(missing) > 0:
-        raise KeyError(f"Missing keys in config.json: {str(missing)}")
-    if "user_agent" not in config:
-        config["user_agent"] = "Reddit Scraper (by u/Allan_QuartermainSr)"
-    return config
+    # Create dictionaries to store user data and submission data
+    user_data = {}
+    post_data = {}
+    comments_data = []
 
+    # Get the list of moderators
+    moderators = [mod.name for mod in subreddit.moderator()]
+    user = user_data
 
-def login(config):
-    """ Login to Reddit """
-    reddit = praw.Reddit(
-        user_agent='Reddit Scraper (by u/Allan_QuartermainSr)',
-        client_id=config['client_id'],
-        client_secret=config['client_secret'],
-        password=config['password'],
-        username=config['username']
-    )
-    return reddit
+    # Check the post sorting method from the config
+    post_sort = config.get("post_sort", "top")  # Default to "top" if not specified
 
-config = load_config()  # Load the configuration
-reddit = login(config)  # Login using the config data
-subreddit_name = config["subreddit"]
-subreddit = reddit.subreddit(subreddit_name)
+    # List of valid post sorting methods
+    valid_sort_methods = ["top", "hot", "new", "rising", "controversial"]
 
-# Define a dictionary to store user data
-user_data = {}
+    # Check if the specified sort method is valid
+    if post_sort not in valid_sort_methods:
+        raise ValueError(f"Invalid post_sort value in config.json. Available options: {', '.join(valid_sort_methods)}")
 
-# Define a list to store all submissions without a timeframe
-all_submissions = []
+    # Print the note from the config, if available
+    notes = config.get("notes", "")
+    if notes:
+        print("Note:", notes)
 
-# Get the list of moderators
-moderators = [mod.name for mod in subreddit.moderator()]
-
-# Check the post sorting method from the config
-post_sort = config.get("post_sort", "top")  # Default to "top" if not specified
-
-# List of valid post sorting methods
-valid_sort_methods = ["top", "hot", "new", "rising", "controversial"]
-
-# Check if the specified sort method is valid
-if post_sort not in valid_sort_methods:
-    raise ValueError(f"Invalid post_sort value in config.json. Available \
-        options: {', '.join(valid_sort_methods)}")
-
-# Print the note from the config, if available
-notes = config.get("notes", "")
-if notes:
-    print("Note:", notes)
     # Iterate through the posts based on the selected sort method
     if post_sort == "top":
         posts = subreddit.top(limit=10000)
     elif post_sort == "hot":
-        posts = subreddit.hot(limit=10000)
+        posts = subreddit.hot(limit=2500)
     elif post_sort == "new":
-        posts = subreddit.new(limit=10000)
+        posts = subreddit.new(limit=500)
     elif post_sort == "rising":
         posts = subreddit.rising(limit=10000)
     elif post_sort == "controversial":
         posts = subreddit.controversial(limit=10000)
 
-# Print a message to indicate scraping has started
-print(f'Starting scraping with sort order: {post_sort}')
+    # Print a message to indicate scraping has started
+    print(f'Starting scraping with sort order: {post_sort}')
 
-# Initialize user data
-user_data = {}
+# Initialize comments_data list outside the loop
+comments_data = []
 
-# Iterate through the posts based on the selected sort method
-for submission in posts:
-    author = submission.author.name if submission.author else 'Deleted'
-    if author in moderators or author == 'Deleted':
-        continue
-    all_submissions.append(submission)  # Append all submissions
-
-    # Define a list to store submissions within the last 3 months
-    submissions_last_3_months = []
-
-    # Calculate the Unix timestamp for three months ago
-    three_months_ago = int(time.time()) - 90 * 24 * 60 * 60
-# Filter submissions to keep only the ones within the last 3 months
-for submission in all_submissions:
-    post_date = dt.datetime.fromtimestamp(submission.created_utc)
-
-    # Check if the post is within the last 3 months
-    if post_date.timestamp() >= three_months_ago:
-        submissions_last_3_months.append(submission)  # Append submissions within the last 3 months
-
-        # Initialize user data if not already present
+try:
+    # Iterate through the posts based on the selected sort method
+    for submission in posts:
         author = submission.author.name if submission.author else 'Deleted'
-        if author not in user_data:
-            user_data[author] = {'User': author, 'Posts': 0, 'Comments': 0, 'Karma': 0}
+                
+        # Skip posts made by moderators or deleted authors
+        if author in moderators or author == 'Deleted':
+            continue
 
-        # Update user data
+        # Fetch the user's information separately
+        user_info = fetch_user_info(reddit, author)
+        if user_info:
+            # Calculate the account age using the retrieved creation date
+            if 'created_utc' in user_info:
+                creation_date = dt.datetime.utcfromtimestamp(user_info['created_utc'])
+                account_age_years = (dt.datetime.utcnow() - creation_date).days / 365.25
+                # Add the user's information to the user_data dictionary
+                user_data[author] = {
+                    'User': author,
+                    'Posts': 1,  # Update the number of posts for this user
+                    'Comments': 0,  # Initialize comments count
+                    'Karma': submission.score,  # Update the karma for this user
+                    'created_utc': user_info['created_utc']  # Add the account creation date
+                    # Add other user details if needed
+                }
+        else:
+            # Handle the case where user_info is None (error fetching user info)
+            account_age_years = None
+            
+        # Initialize user data if not already present
+        if author not in user_data:
+            user_data[author] = {
+                'User': author,
+                'Posts': 0,
+                'Comments': 0,
+                'Karma': 0,
+                # Add other user-related fields here
+            }
+
+        # Update user data for the current author
         user_data[author]['Posts'] += 1
         user_data[author]['Karma'] += submission.score
+        
+        # Initialize comments_data list for the current submission
+        comments_data = []
 
-        # Retrieve comments for the post
+        # Fetch comments for the current submission
         submission.comments.replace_more(limit=None)
         for comment in submission.comments.list():
-            comment_author = comment.author.name if comment.author else 'Deleted'
-
-            # Skip if the comment author is a moderator
-            if comment_author in moderators:
+            # Skip comments made by Automoderator
+            if comment.author and comment.author.name.lower() == "automoderator":
                 continue
+            
+            # Process each comment and extract relevant information
+            comment_author = comment.author.name if comment.author else 'Deleted'
+            comment_body = comment.body
+            comment_score = comment.score
+            comment_id = comment.id
+            # Add other relevant comment attributes here
 
-            # Initialize user data if not already present
-            if comment_author not in user_data:
-                user_data[comment_author] = {'User': comment_author, \
-                    'Posts': 0, 'Comments': 0, 'Karma': 0}
+            # Create a dictionary to store the comment data
+            comment_data = {
+                'author': comment_author,
+                'body': comment_body,
+                'score': comment_score,
+                'id': comment_id,
+                # Add other relevant comment attributes here
+            }
+            # Append the comment data to the list
+            comments_data.append(comment_data)
+            
+        # Add submission data to post_data dictionary, including comments
+        post_data[submission.id] = {
+            'User': author,
+            'title': submission.title,
+            'score': submission.score,
+            'id': submission.id,
+            'url': submission.url,
+            'created_utc': submission.author.created_utc,
+            'comments': comments_data,  # Add the comments data here
+            'user_is_contributor': submission.author.user_is_contributor if submission.author and hasattr(submission.author, 'user_is_contributor') else False,
+            'awardee_karma': submission.author.awardee_karma if submission.author else 0,
+            'awarder_karma': submission.author.awarder_karma if submission.author else 0,
+            'total_karma': submission.author.total_karma if submission.author else 0,
+            'has_verified_email': submission.author.has_verified_email if submission.author and hasattr(submission.author, 'has_verified_email') else False,
+            'link_karma': submission.author.link_karma if submission.author and hasattr(submission.author, 'link_karma') else 0,
+            'comment_karma': submission.author.comment_karma if submission.author and hasattr(submission.author, 'comment_karma') else 0,
+            'accept_followers': submission.author.accept_followers if submission.author and hasattr(submission.author, 'accept_followers') else False,
+        }
 
-            user_data[comment_author]['Comments'] += 1
-            user_data[comment_author]['Karma'] += comment.score
+except Exception as e:
+    print(f"An error occurred: {e}")
+
+# Write user_data to user_data.json
+with open('user_data.json', 'w', encoding='utf-8') as user_file:
+    json.dump(user_data, user_file, ensure_ascii=False, indent=4)
+print("User data written to user_data.json")
+
+# Write submission_data to submission_data.json
+with open('submission_data.json', 'w', encoding='utf-8') as submission_file:
+    json.dump(post_data, submission_file, ensure_ascii=False, indent=4)
+print("Submission data written to submission_data.json")
+
 # Print a message to indicate scraping is complete
 print('Scraping complete.')
-
-# Create a DataFrame from the user data
-df = pd.DataFrame(user_data.values())
-
-# Sort the DataFrame by total karma received and limit to top 200
-df = df.sort_values(by='Karma', ascending=False).head(200)
-
-# Specify the Excel file path
-EXCEL_FILE_PATH = 'user_data.xlsx'
-
-# Export the DataFrame to an Excel file
-df.to_excel(EXCEL_FILE_PATH, index=False)
-
-# Load the Excel file using openpyxl
-workbook = load_workbook(EXCEL_FILE_PATH)
-
-# Select the active sheet
-sheet = workbook.active
-
-# Iterate through the columns and set the column width to the maximum length of data in each column
-for i, column in enumerate(sheet.columns):
-    MAX_LENGTH = 0
-    column = [cell.value for cell in column]
-    for value in column:
-        if value is not None and len(str(value)) > MAX_LENGTH:
-            MAX_LENGTH = len(str(value))
-    ADJUSTED_WIDTH = MAX_LENGTH + 2  # Add some padding
-    sheet.column_dimensions[get_column_letter(i+1)].width = ADJUSTED_WIDTH
-
-# Save the modified Excel file
-workbook.save(EXCEL_FILE_PATH)
-
-print(f'Data written to {EXCEL_FILE_PATH}')
