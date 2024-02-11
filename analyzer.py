@@ -11,9 +11,12 @@ from openpyxl.utils import get_column_letter
 import datetime as dt  # Add this line to import the datetime module
 from collections import defaultdict
 
+<<<<<<< HEAD
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
+=======
+>>>>>>> origin/main
 
 
 # Load data from JSON files
@@ -46,7 +49,10 @@ config = None
 
 # Create a default dictionary with an empty string as the default value
 config = defaultdict(str) if config is None else config
+<<<<<<< HEAD
 logger.info(f"Created a default dictionary with an empty string as the default value{config}")
+=======
+>>>>>>> origin/main
 
 # Access the "notes" field with a default value
 notes = config.get("notes", "")
@@ -55,6 +61,7 @@ if notes:
     print("Note:", notes)
 
 # Create a DataFrame to store potential bot accounts and their criteria
+<<<<<<< HEAD
 bot_df = pd.DataFrame(columns=["User", "Criteria", "Account Age", "Awardee Karma", "Link Karma",
                             "Comment Karma", "Total Karma", "User is Contributor",
                             "Has Verified Email", "Accepts Followers", "Average Sentiment Score"])
@@ -68,6 +75,11 @@ def calculate_average_sentiment(comments):
     average_score = sum(scores) / len(scores)
     logger.debug("Calculated average sentiment score for comments in a submission")
     return average_score
+=======
+bot_df = pd.DataFrame(columns=["User", "Criteria", "Account Age", "Awardee Karma",
+                                "Link Karma", "Comment Karma", "Total Karma",
+                                "User is Contributor", "Has Verified Email", "Accepts Followers"])
+>>>>>>> origin/main
 
 # Create a set to keep track of users already added to the DataFrame
 added_users = set()
@@ -91,7 +103,10 @@ try:
         # Fetch the user's data from user_data
         user_info = user_data.get(username, {})
         if not user_info:
+<<<<<<< HEAD
             logger.info(f"Fetched the user's data from user_data")
+=======
+>>>>>>> origin/main
             continue  # Skip if user data is not available
         
         # Calculate the account age using created_utc from user_data
@@ -112,7 +127,10 @@ try:
                 criteria_met.append("Low Karma")
             if account_age <= ACCOUNT_AGE_THRESHOLD:
                 criteria_met.append("Young Account Age")
+<<<<<<< HEAD
                 logger.info("Checked for characteristics of potential bot accounts")
+=======
+>>>>>>> origin/main
 
             # Check if the user has already been added to the DataFrame
             if username not in added_users:
