@@ -20,26 +20,15 @@ def fetch_user_info(reddit, username):
         user = reddit.redditor(username)
         # Check if the user exists
         if not user:
-<<<<<<< HEAD
             return None
         # Check if the user has a creation date
         if not hasattr(user, 'created_utc'):
-=======
-            print(f"User {username} not found.")
-            return None
-        # Check if the user has a creation date
-        if not hasattr(user, 'created_utc'):
-            print(f"User {username} does not have a creation date.")
->>>>>>> origin/main
             return None
         user_data = {
             'created_utc': user.created_utc
             # Add other user details if needed
         }
-<<<<<<< HEAD
         logger.debug(f"{reddit, username}Fetched User Info.")
-=======
->>>>>>> origin/main
         return user_data
     except Exception as e:
         logger.info(f"Error fetching user info for {username}: {e}")
@@ -82,7 +71,6 @@ if __name__ == "__main__":
 
 # Check the post sorting method from the config
 post_sort = config.get("post_sort", {"method": "top", "limit": 10000})  # Default to "top" if not specified
-<<<<<<< HEAD
 logger.debug(f"{post_sort}Checking the post sorting method from the config")
 # Extract the sorting method from the post_sort dictionary
 sort_method = post_sort["method"]
@@ -101,24 +89,6 @@ notes = config.get("notes", "")
 if notes:
     logger.debug("Note:", notes)
 
-=======
-
-# Extract the sorting method from the post_sort dictionary
-sort_method = post_sort["method"]
-
-# List of valid post sorting methods
-valid_sort_methods = ["top", "hot", "new", "rising", "controversial"]
-
-# Check if the specified sort method is valid
-if sort_method not in valid_sort_methods:
-    raise ValueError(f"Invalid post_sort value in config.json. Available options: {', '.join(valid_sort_methods)}")
-
-# Print the note from the config, if available
-notes = config.get("notes", "")
-if notes:
-    print("Note:", notes)
-
->>>>>>> origin/main
 # Iterate through the posts based on the selected sort method
 if sort_method == "top":
     posts = subreddit.top(limit=post_sort["limit"])
@@ -142,7 +112,6 @@ try:
         author = submission.author.name if submission.author else 'Deleted'
         if author in moderators or author == 'Deleted':
             continue
-<<<<<<< HEAD
 
         # Initialize once per submission ID, if not already present
         if submission.id not in post_data:
@@ -161,10 +130,6 @@ try:
         post_data[submission.id]['comments'] = comments_data  # Update the 'comments' key here
         logger.info("Added submission data for %s", submission.id)
 
-=======
-        print("Author:", author)
-                
->>>>>>> origin/main
         # Skip posts made by moderators or deleted authors
         if author in moderators or author == 'Deleted':
             print("Skipping post by moderator or deleted author")
@@ -175,7 +140,6 @@ try:
         user_info = fetch_user_info(reddit, author)
         print("User info:", user_info)
         if user_info:
-<<<<<<< HEAD
             # Attempt to access the 'created_utc' field from user_info
             if 'created_utc' in user_info:
                 logger.debug(f"user_info {user_info} was found.")
@@ -190,23 +154,6 @@ try:
                 creation_date = dt.datetime.utcfromtimestamp(user_info['created_utc'])
                 account_age_years = (dt.datetime.utcnow() - creation_date).days / 365.25
                 logger.info(f"{creation_date}Account age calculated")
-=======
-            print("User info fetched successfully")
-            # Attempt to access the 'created_utc' field from user_info
-            if 'created_utc' in user_info:
-                print("Creation date found")
-            else:
-                # Handle the case where 'created_utc' is missing from user_info
-                print(f"Error: User {author} does not have a creation date.")
-                continue
-                
-            try:
-                print("Calculating account age")
-                # Calculate the account age using the retrieved creation date
-                creation_date = dt.datetime.utcfromtimestamp(user_info['created_utc'])
-                account_age_years = (dt.datetime.utcnow() - creation_date).days / 365.25
-                print("Account age calculated")
->>>>>>> origin/main
                 # Add the user's information to the user_data dictionary
                 if author not in user_data:  # Check if the user already exists in user_data
                     user_data[author] = {
@@ -217,16 +164,11 @@ try:
                         'created_utc': user_info['created_utc']  # Add the account creation date
                         # Add other user details if needed
                     }
-<<<<<<< HEAD
                     logger.info(f"User {author} does not have a creation date.")
-=======
-                    print("User added to user_data")
->>>>>>> origin/main
                 else:
                     # Update user data for the current author
                     user_data[author]['Posts'] += 1
                     user_data[author]['Karma'] += submission.score
-<<<<<<< HEAD
                     logger.debug(f"{user_data} User data updated")
             except KeyError:
                 # Handle the case where 'created_utc' is missing from user_info
@@ -234,15 +176,6 @@ try:
         else:
             # Handle case where user data is not available (deleted or suspended user)
             logger.info(f"Skipping user {author}: User data not available")
-=======
-                    print("User data updated")
-            except KeyError:
-                # Handle the case where 'created_utc' is missing from user_info
-                print(f"Error: User {author} does not have a creation date.")
-        else:
-            # Handle case where user data is not available (deleted or suspended user)
-            print(f"Skipping user {author}: User data not available")
->>>>>>> origin/main
             continue
         
         # Initialize user data if not already present
@@ -252,52 +185,13 @@ try:
                 'Karma': 0,
                 # Add other user-related fields here
             }
-<<<<<<< HEAD
             logger.info(f"User {user_data} does not have a creation date.")
-=======
-            print("Initialized user data")
->>>>>>> origin/main
 
         # Update user data for the current author
         user_data[author]['Posts'] += 1
         user_data[author]['Karma'] += submission.score
-<<<<<<< HEAD
         logger.info(f"User {user_data} does not have a creation date.")
 
-=======
-        print("User data updated")
-
-        # Initialize comments_data list for the current submission
-        comments_data = []
-
-        # Fetch comments for the current submission
-        submission.comments.replace_more(limit=None)
-        for comment in submission.comments.list():
-            # Skip comments made by Automoderator
-            if comment.author and comment.author.name.lower() == "automoderator":
-                continue
-            
-            # Process each comment and extract relevant information
-            comment_author = comment.author.name if comment.author else 'Deleted'
-            comment_body = comment.body
-            comment_score = comment.score
-            comment_id = comment.id
-            # Add other relevant comment attributes here
-
-            # Create a dictionary to store the comment data
-            comment_data = {
-                'author': comment_author,
-                'body': comment_body,
-                'score': comment_score,
-                'id': comment_id,
-                # Add other relevant comment attributes here
-            }
-            # Append the comment data to the list
-            comments_data.append(comment_data)
-        
-        print("Comments data collected:", len(comments_data))
-            
->>>>>>> origin/main
         # Add submission data to post_data dictionary, including comments
         post_data[submission.id] = {
             'User': author,
@@ -316,12 +210,7 @@ try:
             'comment_karma': submission.author.comment_karma if submission.author and hasattr(submission.author, 'comment_karma') else 0,
             'accept_followers': submission.author.accept_followers if submission.author and hasattr(submission.author, 'accept_followers') else False,
         }
-<<<<<<< HEAD
         logger.info(f"{post_data}Submission data added")
-=======
-        print("Submission data added")
-
->>>>>>> origin/main
 except Exception as e:
     logger.exception("An unexpected error occurred: %s", e)  # Captures and logs the exception with traceback
 
