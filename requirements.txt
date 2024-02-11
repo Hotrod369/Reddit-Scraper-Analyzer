@@ -4,3 +4,4 @@ openpyxl==3.0.9
 requests==2.31.0
 click==8.0.3
 configparser==6.0.0
+nltk==3.8.1
