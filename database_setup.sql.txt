@@ -1,0 +1,62 @@
+# Create tables script
+CREATE TABLE users (
+  username VARCHAR(255) PRIMARY KEY,
+  karma INTEGER,
+  created_utc BIGINT
+);
+
+CREATE TABLE submissions (
+  id VARCHAR(255) PRIMARY KEY,
+  user_username VARCHAR(255),
+  title TEXT,
+  score INTEGER,
+  url TEXT,
+  created_utc BIGINT,
+  awardee_karma INTEGER,
+  awarder_karma INTEGER,
+  total_karma INTEGER,
+  has_verified_email BOOLEAN,
+  link_karma INTEGER,
+  comment_karma INTEGER,
+  accepts_followers BOOLEAN,
+  FOREIGN KEY (user_username) REFERENCES users(username)
+);
+
+CREATE TABLE comments (
+  id VARCHAR(255) PRIMARY KEY,
+  author VARCHAR(255),
+  body TEXT,
+  score INTEGER,
+  submission_id VARCHAR(255),
+  FOREIGN KEY (author) REFERENCES users(username),
+  FOREIGN KEY (submission_id) REFERENCES submissions(id)
+);
+
+# commands to query database in pgAdmin
+
+SELECT * FROM users;
+SELECT * FROM submissions;
+SELECT * FROM comments;
+SELECT * FROM submissions WHERE user_username = 'your_username_here';
+SELECT * FROM comments WHERE submission_id = 'submission_id_here';
+
+# This will delete the contents of the database tables without deleting the tables themselves.
+
+TRUNCATE TABLE users, submissions, comments RESTART IDENTITY CASCADE;
+
+# If you want to clear the tables automatically when running the json_to_db.py instead of running
+# the script manually  add the following try block.
+try:
+    cur.execute("TRUNCATE TABLE users, submissions, comments RESTART IDENTITY CASCADE;")
+    conn.commit()
+    logger.info("Tables have been cleared.")
+except psycopg2.DatabaseError as e:
+    logger.exception(f"Database error during TRUNCATE: {e}")
+    conn.rollback()
+
+# If you need to delete the database tables for some reason these are the commands.
+
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS submissions;
+DROP TABLE IF EXISTS users;
+
