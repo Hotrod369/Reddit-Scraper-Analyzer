@@ -7,8 +7,9 @@ from nltk.chunk import ne_chunk
 from nltk.sentiment import SentimentIntensityAnalyzer
 from nltk.tokenize import word_tokenize
 from openpyxl import Workbook
-from openpyxl.utils import get_column_letter
-from tools.config.logger_config import init_logger, logging
+from openpyxl.worksheet.worksheet import Worksheet
+from tools.config.logger_config import init_logger
+import logging
 
 logger = logging.getLogger(__name__)
 logger.info("Basic logging set")
@@ -84,7 +85,7 @@ try:
     for author, comment_id, body in comments:
         logger.info("Performing sentiment analysis")
         # Perform sentiment analysis
-        sentiment_score = sia.polarity_scores(body)['compound']
+        sentiment_score = SIA.polarity_scores(body)['compound']
         logger.info("Sentiment analysis complete")
 
         # Tokenize and tag for part-of-speech
@@ -109,30 +110,35 @@ try:
         logger.info("Lexical Diversity Complete")
 
         # Process and potentially update analysis results back to the database
-        sia = SentimentIntensityAnalyzer()
-        # Update sentiment score back to database (you can expand this based on your requirements)
-        cur.execute("UPDATE comments SET sentiment = %s WHERE id = %s", (sentiment_score, comment_id))
-        logger.info("Updated sentiment score back to database")
+#        sia = SentimentIntensityAnalyzer()
+#        # Update sentiment score back to database (you can expand this based on your requirements)
+#        cur.execute("UPDATE comments SET sentiment = %s WHERE id = %s", (sentiment_score, comment_id))
+#        logger.info("Updated sentiment score back to database")
 
     # Commit changes to the database
     conn.commit()
-    logger.info("NLTK analysis completed.")
+    logger.info("Comment analysis completed.")
 except Exception as e:
     logger.exception(f"An error occurred: {e}")
 
 try:
     # Specify the Excel file path and save the workbook
-    EXCEL_FILE_PATH = 'analysis_results/nltk_analysis.xlsx'
-    # Prepare a new Excel workbook and sheet
+    EXCEL_FILE_PATH = 'analysis_results/comment_analysis.xlsx'
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "NLTK Analysis"
+    if sheet is None:
+        sheet = workbook.create_sheet(title="Comment Data Analysis")
+    else:
+        sheet.title = "User Data Analysis"
+
+    # Explicitly cast sheet to Worksheet to satisfy the type checker
+    assert isinstance(sheet, Worksheet), "Active sheet is not a Worksheet instance"
     sheet.append(["Author", "Comment ID", "Comment Body", "Sentiment Score",
                 "Named Entities", "Common Bigrams", "Lexical Diversity"])
 
     for author, comment_id, body in comments:
         # Recalculate sentiment score for this comment's body
-        sentiment_score = sia.polarity_scores(body)['compound']
+        sentiment_score = SIA.polarity_scores(body)['compound']
 
         # Additional NLP processing (tokenization, named entity recognition, etc.)
         tokens = word_tokenize(body)
@@ -157,7 +163,7 @@ try:
         )
 
         # Update sentiment score in the database
-        cur.execute("UPDATE comments SET sentiment = %s WHERE id = %s", (sentiment_score, comment_id))
+#        cur.execute("UPDATE comments SET sentiment = %s WHERE id = %s", (sentiment_score, comment_id))
 
     # Commit changes to the database
     conn.commit()

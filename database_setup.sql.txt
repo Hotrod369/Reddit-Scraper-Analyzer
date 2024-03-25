@@ -1,7 +1,15 @@
 # Create tables script
+
 CREATE TABLE users (
   username VARCHAR(255) PRIMARY KEY,
   karma INTEGER,
+  awardee_karma INTEGER,
+  awarder_karma INTEGER,
+  total_karma INTEGER,
+  has_verified_email BOOLEAN,
+  link_karma INTEGER,
+  comment_karma INTEGER,
+  accepts_followers BOOLEAN,
   created_utc BIGINT
 );
 
@@ -12,13 +20,7 @@ CREATE TABLE submissions (
   score INTEGER,
   url TEXT,
   created_utc BIGINT,
-  awardee_karma INTEGER,
-  awarder_karma INTEGER,
-  total_karma INTEGER,
-  has_verified_email BOOLEAN,
-  link_karma INTEGER,
-  comment_karma INTEGER,
-  accepts_followers BOOLEAN,
+  user_is_contributor BOOLEAN,
   FOREIGN KEY (user_username) REFERENCES users(username)
 );
 
@@ -59,4 +61,3 @@ except psycopg2.DatabaseError as e:
 DROP TABLE IF EXISTS comments;
 DROP TABLE IF EXISTS submissions;
 DROP TABLE IF EXISTS users;
-

@@ -4,10 +4,8 @@ This file handles the Reddit login and configuration options
 import json
 import praw
 import praw.exceptions
-from tools.config.logger_config import init_logger, logging
-
-
-
+from tools.config.logger_config import init_logger
+import logging
 
 logger = logging.getLogger(__name__)
 logger.info("Basic logging set")
