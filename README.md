@@ -6,7 +6,7 @@ The **Reddit Scraper & Analyzer** is an advanced tool designed to navigate throu
 
 Utilizing the **Python Reddit API Wrapper (PRAW)** for robust data extraction, the tool gathers comprehensive information from specified subreddits, including posts, comments, and user metrics. This data then undergoes detailed analysis, leveraging the **Natural Language Toolkit (NLTK)** for sophisticated text processing and sentiment analysis. This analysis assesses various parameters such as karma scores, account ages, and activity patterns to detect irregularities and understand the sentiment behind user comments.
 
-Additionally, the system integrates **PostgreSQL**, a powerful open-source relational database, to manage and store the large volumes of data efficiently. This allows for advanced querying capabilities and secure storage of the scraped data, facilitating complex data analysis tasks.
+Additionally, the system integrates **PostgreSQL**, a powerful open-source relational database, to manage and store large volumes of data efficiently. This allows for advanced querying capabilities and secure storage of the scraped data, facilitating complex data analysis tasks.
 
 The **Reddit Scraper & Analyzer** is built with flexibility in mind, enabling users to customize the scraping and analysis processes according to specific research needs or investigative criteria. It encapsulates the complexity of its operations behind a user-friendly interface, making advanced data analysis accessible to those with limited technical backgrounds.
 
@@ -41,10 +41,15 @@ submission_data.json:
 ```
 
 **Data Extraction:** Extract user and submission data including usernames, karma, account creation dates, post titles, scores, etc.
+
 **Analysis:** Analyze user behavior, account characteristics, and other attributes to identify potential bots or trolls.
+
 **Reporting:** Generate reports summarizing the findings of the analysis, including statistics, insights, and visualizations.
+
 **Customization:** Configure scraping parameters, analysis criteria, and reporting formats to suit specific needs.
+
 **Integration:** Easily integrate with other Python libraries and tools for additional analysis or processing.
+
 **Requirements:**
 
 - Python 3.12.1
@@ -107,7 +112,7 @@ Enter the password for the postgres user when prompted.
 
 1. **Execute the SQL script** to create the tables needed for your application. You can copy and paste the commands from your database_setup.sql.txt file into the psql command line tool or use a PostgreSQL GUI like pgAdmin.
 
-2. **Verify the tables creation by running:**
+2. **Verify the table's creation by running:**
 
 `\dt`
 
@@ -155,11 +160,17 @@ First, configure your config.json file in tools/config directory with your Reddi
 ```
 
 **subreddit:** Specify the subreddit from which you want to scrape data. Multiple subreddits can be scraped by separating with a `+` like this `"subreddit1+subreddit2+subreddit3"`
+
 **client_id & client_secret:** Your Reddit application's credentials.
+
 **username & password:** Your Reddit account credentials for authentication.
+
 **user_agent:** A descriptive user agent to help Reddit identify your script.
-**post_sort, method and limit:** Defines how you want to sort the posts and the number of posts to scrape.
+
+**post_sort, method, and limit:** Defines how you want to sort the posts and the number of posts to scrape.
+
 **notes:** Additional notes or parameters for reference.
+
 **karma_threshold & account_age_threshold:** Criteria for analyzing and identifying potential bots.
 
 ### 2. Running the app
@@ -205,7 +216,7 @@ If the problem persists, please create an **issue** (<https://github.com/YourGit
 - The output, logs, or error messages that you receive (if any).
 - Steps to reproduce the issue (if applicable).
 - Any relevant screenshots or example files (please make sure there's no sensitive data).
-- The version of the software or tools you are using, including Python version.
+- The version of the software or tools you are using, including the Python version.
 
 Our team will review the issue and get back to you with a resolution or further questions.
 

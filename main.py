@@ -70,7 +70,7 @@ def main():
     from tools.json_to_db import main
     logger.info('Converting JSON to database')
     main()  # Pass both data sets
-    
+
 
     from data_analysis.comment_analysis import run_analyze_com
 
