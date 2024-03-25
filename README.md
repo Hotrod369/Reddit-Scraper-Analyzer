@@ -16,7 +16,7 @@ Serving as a critical resource for digital researchers, social media analysts, a
 
 **Data Scraping:** Utilize the scraper.py module to collect posts, comments, and user information from specified subreddits.
 
-**JSON File** Generation: The scraper will output two JSON files containing user data (user_data.json) and submission data (submission_data.json). Here are examples of the expected JSON structures:
+**JSON File Generation:** The scraper will output two JSON files containing user data (user_data.json) and submission data (submission_data.json). Here are examples of the expected JSON structures:
 
 user_data.json:
 
@@ -28,6 +28,7 @@ user_data.json:
     ...
 }
 ```
+
 submission_data.json:
 
 ```json
@@ -44,25 +45,28 @@ submission_data.json:
 **Reporting:** Generate reports summarizing the findings of the analysis, including statistics, insights, and visualizations.
 **Customization:** Configure scraping parameters, analysis criteria, and reporting formats to suit specific needs.
 **Integration:** Easily integrate with other Python libraries and tools for additional analysis or processing.
-**Requirements**
+**Requirements:**
+
 - Python 3.12.1
+
 **Required Python packages** (specified in requirements.txt)
-- praw 7.7.1
-- pandas 2.2.1
-- openpyxl 3.1.2
-- requests 2.31.0
-- nltk 3.8.1
+
+- PRAW 7.7.1
+- Pandas 2.2.1
+- Openpyxl 3.1.2
+- Requests 2.31.0
+- NLTK 3.8.1
 - psycopg2-binary> 2.9.9
 
 ## Installation
 
 ### 1. Clone this repository to your local machine
 
-`git clone https://github.com/YourGitHubUsername/Reddit-Scraper-Analyzer.git`
+`git clone https://github.com/Hotrod369/Reddit-Scraper-Analyzer.git`
 
 ### 2. Navigate to the project directory
 
-`cd reddit_scraper_analyzer`
+`cd Reddit-Scraper-Analyzer`
 
 ### 3. Install the required Python packages using the requirements.txt by running the following command file
 
@@ -82,8 +86,8 @@ submission_data.json:
 
 1. On Windows, you can use the SQL Shell (psql) that comes with the
 
-* PostgreSQL installation.
-* On macOS and Linux, you can open a terminal and enter psql to access the PostgreSQL command line tool.
+- PostgreSQL installation.
+- On macOS and Linux, you can open a terminal and enter psql to access the PostgreSQL command line tool.
 
 2. **Log in to PostgreSQL:**
 
@@ -150,7 +154,7 @@ First, configure your config.json file in tools/config directory with your Reddi
 }
 ```
 
-**subreddit:** Specify the subreddit from which you want to scrape data. Multple subreddits can be scraped by separating with a `+` like this `"subreddit1+subreddit2+subreddit3"`
+**subreddit:** Specify the subreddit from which you want to scrape data. Multiple subreddits can be scraped by separating with a `+` like this `"subreddit1+subreddit2+subreddit3"`
 **client_id & client_secret:** Your Reddit application's credentials.
 **username & password:** Your Reddit account credentials for authentication.
 **user_agent:** A descriptive user agent to help Reddit identify your script.
@@ -162,9 +166,7 @@ First, configure your config.json file in tools/config directory with your Reddi
 
 **Execute the main.py script to start scraping Reddit based on the parameters set in your config.json:**
 
-```bash
-python -m main
-```
+`python -m main`
 
 This step will collect posts and comments from the specified subreddit and save them into JSON files (user_data.json and submission_data.json).
 
@@ -196,7 +198,7 @@ If you encounter any issues with file creation or other aspects of the workflow:
 
 ### Creating an Issue
 
-If the problem persists, please create an **issue** (https://github.com/YourGitHubUsername/Reddit-Scraper-Analyzer/issues/new) on GitHub with the following information:
+If the problem persists, please create an **issue** (<https://github.com/YourGitHubUsername/Reddit-Scraper-Analyzer/issues/new>) on GitHub with the following information:
 
 - A clear and descriptive title.
 - A detailed description of the issue, including the step at which the issue arises.
@@ -206,7 +208,6 @@ If the problem persists, please create an **issue** (https://github.com/YourGitH
 - The version of the software or tools you are using, including Python version.
 
 Our team will review the issue and get back to you with a resolution or further questions.
-
 
 ## Contributing
 
