@@ -12,6 +12,13 @@ submission_data.json
 user_data.json
 potential_bot_accounts.xlsx
 .ipynb_checkpoints
+.sourcery.yaml
+.pre-commit-config.yaml
+pyproject.toml
+debug.log
+reddit_moderator_helper.egg-info
+analysis_results/
+
 
 # C extensions
 *.so

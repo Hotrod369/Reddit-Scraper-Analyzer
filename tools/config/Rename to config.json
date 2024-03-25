@@ -1,4 +1,10 @@
 {
+    "database": {
+		"dbname": "reddit_analysis",
+		"user": "postgres",
+		"password": "xxxxxxxxxxx",
+		"host": "localhost"
+	},
     "subreddit": "xxxxxxxxxxxxxxxx",
     "client_id": "xxxxxxxxxxxxxxxxx",
     "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
