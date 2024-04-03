@@ -21,14 +21,13 @@ from tools.config.logger_config import init_logger, logging
 
 
 logger = logging.getLogger(__name__)
-logger.info("Basic logging set")
+logger.info("Main Basic logging set")
 init_logger()
 
 # Load the configuration file
 with open('tools/config/config.json', 'r', encoding='utf-8') as f:
-    logger.info("Main Loading config file")
+    logger.debug("Main Loading config file")
     config = json.load(f)
-    logger.info("Main Config loaded")
     db_config = config['database']
     logger.info("main json_to_db Database config loaded")
 
@@ -50,15 +49,16 @@ def main():
     from tools.scraper import run_scraper
     # Run the scraper package
     run_scraper()
+    logger.debug("Scraper package executed")
 
 
     # Wait until both JSON files are created
     while not check_files_exist(file1_path, file2_path):
-        print(f"Waiting for {file1_path} and {file2_path} to be created...")
+        logger.debug(f"Waiting for {file1_path} and {file2_path} to be created...")
         time.sleep(60)  # Wait for 1 minute before checking again
 
     # Both files exist, continue with the next package
-    print("JSON files found! Continuing execution...")
+    logger.debug("JSON files found! Continuing execution...")
 
     # Load JSON data
     with open(file1_path, 'r', encoding='utf-8') as f:
@@ -68,6 +68,7 @@ def main():
 
 
     from tools.json_to_db import main
+
     logger.info('Converting JSON to database')
     main()  # Pass both data sets
 

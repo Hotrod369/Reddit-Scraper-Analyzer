@@ -1,5 +1,5 @@
-
 import json
+import re
 import nltk
 import psycopg2
 from nltk import FreqDist, bigrams, ngrams, pos_tag
@@ -46,14 +46,36 @@ download_nltk_data()
 # Calculate average sentiment score for comments in a submission
 def run_analyze_com(comments):
     if not comments:
-        return 0  # Return neutral score if there are no comments
-    scores = [SIA.polarity_scores(comments)['compound'] for comments in comments]
-    average_score = sum(scores) / len(scores)
-    logger.info(f"Calculated average sentiment score for comments in a submission: {average_score}")
-    return average_score
+        logger.info("No comments to analyze.")
+        return []
+
+    analyzed_comments = []
+    for comment in comments:
+        try:
+            id, author, body, score, submission_id = comment
+            sentiment_analysis = SIA.polarity_scores(body)
+            sentiment_score = sentiment_analysis['compound']
+
+            if sentiment_score >= 0.05:
+                sentiment_label = "Positive"
+            elif sentiment_score <= -0.05:
+                sentiment_label = "Negative"
+            else:
+                sentiment_label = "Neutral"
+
+            sentiment_cell_value = f"{sentiment_score} ({sentiment_label})"
+            analyzed_comments.append((id, author, body, sentiment_cell_value))
+
+        except ValueError as e:
+            logger.error(f"Error unpacking comment: {e}")
+            continue
+
+    logger.info(f"Analyzed {len(analyzed_comments)} comments.")
+    return analyzed_comments
 
 def tokenize_and_tag(text):
     tokens = word_tokenize(text)
+    logger.info(f"Tokens {tokens}")
     return pos_tag(tokens)
 
 def named_entity_recognition(tagged_tokens):
@@ -61,14 +83,40 @@ def named_entity_recognition(tagged_tokens):
     return ne_chunk(tagged_tokens)
 
 def frequency_distribution(tokens):
-    return FreqDist(tokens)
+    logger.info(f"Tokens {tokens}")
+    # Create a frequency distribution of the tokens
+    freq_dist = FreqDist(tokens)
+    logger.info(f"Frequency distribution {freq_dist}")
+    # Return the frequency distribution as a dictionary
+    return dict(freq_dist)
+
 
 def find_ngrams(tokens, n=2):  # Change n for bigrams (2), trigrams (3), etc.
+    logger.debug(f"NGRAMS Tokens {tokens}")
     return list(ngrams(tokens, n))
 
 def lexical_diversity(text):
+    """
+    Calculates the lexical diversity of a text and categorizes it.
+    """
+    text = text.lower()  # Convert to lowercase
+    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation and special characters
+    text = re.sub(r'\s+', ' ', text)  # Replace multiple spaces with a single space
+    text = text.strip()  # Remove leading and trailing whitespace
+
     tokens = word_tokenize(text)
-    return len(set(tokens)) / len(tokens)
+    if not tokens:
+        return 0, "No text"  # Handle empty or whitespace-only strings
+
+    diversity_score = len(set(tokens)) / len(tokens)
+    if diversity_score > 0.7:
+        diversity_label = "Highly diverse"
+    elif diversity_score > 0.4:
+        diversity_label = "Moderately diverse"
+    else:
+        diversity_label = "Less diverse"
+
+    return diversity_score, diversity_label
 
 # Connect to the database
 try:
@@ -81,6 +129,7 @@ try:
     cur.execute("SELECT author, id, body FROM comments")
     comments = cur.fetchall()
     logger.info("Fetched comments for analysis.")
+    logger.info("Analyzing Comments This Will Take Some time.")
 
     for author, comment_id, body in comments:
         logger.info("Performing sentiment analysis")
@@ -109,12 +158,6 @@ try:
         diversity = lexical_diversity(body)
         logger.info("Lexical Diversity Complete")
 
-        # Process and potentially update analysis results back to the database
-#        sia = SentimentIntensityAnalyzer()
-#        # Update sentiment score back to database (you can expand this based on your requirements)
-#        cur.execute("UPDATE comments SET sentiment = %s WHERE id = %s", (sentiment_score, comment_id))
-#        logger.info("Updated sentiment score back to database")
-
     # Commit changes to the database
     conn.commit()
     logger.info("Comment analysis completed.")
@@ -139,6 +182,17 @@ try:
     for author, comment_id, body in comments:
         # Recalculate sentiment score for this comment's body
         sentiment_score = SIA.polarity_scores(body)['compound']
+        if sentiment_score >= 0.05:
+            sentiment_label = "Positive"
+        elif sentiment_score <= -0.05:
+            sentiment_label = "Negative"
+        else:
+            sentiment_label = "Neutral"
+        sentiment_cell_value = f"{sentiment_score} ({sentiment_label})"
+
+        # Lexical Diversity
+        diversity_score, diversity_label = lexical_diversity(body)
+        diversity_cell_value = f"{diversity_score:.2f} ({diversity_label})"
 
         # Additional NLP processing (tokenization, named entity recognition, etc.)
         tokens = word_tokenize(body)
@@ -155,15 +209,12 @@ try:
                 author,
                 comment_id,
                 f"{body[:100]}...",
-                sentiment_score,
+                sentiment_cell_value,
                 entities,
                 common_bigrams,
-                diversity_score,
+                diversity_cell_value,
             ]
         )
-
-        # Update sentiment score in the database
-#        cur.execute("UPDATE comments SET sentiment = %s WHERE id = %s", (sentiment_score, comment_id))
 
     # Commit changes to the database
     conn.commit()

@@ -3,7 +3,7 @@ from tools.config.logger_config import init_logger
 import logging
 
 logger = logging.getLogger(__name__)
-logger.info("Basic logging set")
+logger.info("Cal Account Age Basic logging set")
 init_logger()
 
 def calculate_account_age(created_utc):
@@ -30,7 +30,7 @@ def calculate_account_age(created_utc):
 
         # Convert the time difference to years
         account_age_years = account_age_delta.days / 365.25
-        logger.info(f"Calculated account age: {account_age_years:.2f} years for UTC {created_utc}")
+        logger.debug(f"Calculated account age: {account_age_years:.2f} years for UTC {created_utc}")
 
         return account_age_years
 

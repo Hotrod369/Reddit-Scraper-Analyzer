@@ -20,7 +20,7 @@ def load_config():
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            logger.info("Config loaded successfully")
+            logger.debug("Config loaded successfully")
             return config  # Ensure this is inside the try block to return the loaded config
     except FileNotFoundError:
         logger.error(f"Configuration file {config_path} not found.")
@@ -28,6 +28,8 @@ def load_config():
     except json.JSONDecodeError:
         logger.error(f"Error decoding JSON from the configuration file {config_path}.")
         raise
+logger.info("Config loaded successfully")
+
 def login(config):  # sourcery skip: inline-immediately-returned-variable
     """
     The `login` function logs into Reddit using the provided configuration parameters.

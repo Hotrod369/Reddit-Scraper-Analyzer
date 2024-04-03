@@ -10,6 +10,7 @@ CREATE TABLE users (
   link_karma INTEGER,
   comment_karma INTEGER,
   accepts_followers BOOLEAN,
+  dormant_days INTEGER,
   created_utc BIGINT
 );
 

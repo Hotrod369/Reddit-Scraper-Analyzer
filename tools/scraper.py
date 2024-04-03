@@ -1,20 +1,21 @@
 import json
 import os
 import datetime as dt
+import time
 import prawcore
 from tools.config.logger_config import init_logger
 from tools.config.reddit_login import load_config, login
 import logging
 
 logger = logging.getLogger(__name__)
-logger.info("Basic logging set")
+logger.info("Scraper Basic logging set")
 init_logger()
 
 def setup_reddit():
     """
     Sets up the Reddit instance for scraping data, logging in, and loading the target subreddit.
     """
-    logger.info("Setting up Reddit instance...")
+    logger.debug("Setting up Reddit instance...")
     config = load_config()
     reddit = login(config)
     logger.info("Logged into Reddit.")
@@ -26,30 +27,37 @@ def fetch_posts(reddit, config):
     """
     logger.info("Fetching posts...")
     subreddit_names = config["subreddit"].split('+')
-    post_sort = config.get("post_sort", {"method": "top", "limit": 100})
+    post_sort = config.get("post_sort", {"method": "top", "limit": 1000})
     sort_method = post_sort["method"]
     posts_limit = post_sort["limit"]
     all_posts = []
 
     for subreddit_name in subreddit_names:
-        subreddit = reddit.subreddit(subreddit_name)
-        logger.info(f"Fetching {sort_method} posts from {subreddit_name} with limit {posts_limit}.")
-        
-        if sort_method == "top":
-            posts = subreddit.top(limit=posts_limit)
-        elif sort_method == "hot":
-            posts = subreddit.hot(limit=posts_limit)
-        elif sort_method == "new":
-            posts = subreddit.new(limit=posts_limit)
-        elif sort_method == "rising":
-            posts = subreddit.rising(limit=posts_limit)
-        elif sort_method == "controversial":
-            posts = subreddit.controversial(limit=posts_limit)
-        else:
-            raise ValueError(f"Unsupported sort method: {sort_method}")
-        
-        all_posts.extend(posts)
-    
+        try:
+            subreddit = reddit.subreddit(subreddit_name)
+            logger.debug(f"Fetching {sort_method} posts from {subreddit_name} with limit {posts_limit}.")
+            # The method below will trigger the API call and may raise an exception if there's an issue
+            if sort_method == "top":
+                posts = subreddit.top(limit=posts_limit)
+            elif sort_method == "hot":
+                posts = subreddit.hot(limit=posts_limit)
+            elif sort_method == "new":
+                posts = subreddit.new(limit=posts_limit)
+            elif sort_method == "rising":
+                posts = subreddit.rising(limit=posts_limit)
+            elif sort_method == "controversial":
+                posts = subreddit.controversial(limit=posts_limit)
+            else:
+                raise ValueError(f"Unsupported sort method: {sort_method}")
+
+            all_posts.extend(posts)
+        except prawcore.exceptions.Redirect:
+            logger.error(f"Failed to fetch posts from '{subreddit_name}'. This may be due to a typo in the subreddit name, the subreddit being private, banned, or non-existent. Please check the subreddit name in the config file.")
+            continue
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while fetching posts from '{subreddit_name}': {e}")
+            continue
+
     return all_posts
 
 
@@ -58,41 +66,64 @@ def fetch_user_info(reddit, username):
     Fetches user info from Reddit's API.
     """
     logger.debug(f"Fetching user info for: {username}")
-    user = reddit.redditor(username)
-    # Check if the user exists
-    if not user:
-        return None
 
-    if username.lower() == 'deleted':  # Handle deleted users before making API calls
-        logger.info(f"User '{username}' is deleted, skipping.")
+    if username.lower() == 'deleted':
+        logger.debug(f"User '{username}' is deleted, skipping.")
         return None
 
     try:
-        # Check if the user has a creation date
+        user = reddit.redditor(username)
+        _ = user.link_karma  # Trigger an attribute access to check user existence
+    except Exception as e:
+        logger.error(f"User '{username}' not found: {e}.")
+        return None
+
+    try:
         if not hasattr(user, 'created_utc'):
             logger.error(f"User '{username}' has no creation date.")
             return None
+
+        creation_time = user.created_utc
+
+        # Get the oldest of the first 1000 comments and submissions
+        comments = list(user.comments.new(limit=1000))
+        submissions = list(user.submissions.new(limit=1000))
+
+        first_comment = comments[-1] if comments else None
+        first_submission = submissions[-1] if submissions else None
+
+        if first_comment and first_submission:
+            first_activity_time = min(first_comment.created_utc, first_submission.created_utc)
+        elif first_comment:
+            first_activity_time = first_comment.created_utc
+        elif first_submission:
+            first_activity_time = first_submission.created_utc
+        else:
+            first_activity_time = time.time()
+
+        dormant_time = first_activity_time - creation_time
+        dormant_days = dormant_time // (24 * 60 * 60)
+
         user_data = {
             'username': username,
             'Karma': user.link_karma + user.comment_karma,
             'created_utc': user.created_utc,
-            'user_is_verified': user.is_verified if hasattr(user, 'is_verified') else False,
+            'dormant_days': dormant_days,
+            'user_is_verified': getattr(user, 'is_verified', False),
             'awardee_karma': user.awardee_karma,
             'awarder_karma': user.awarder_karma,
             'total_karma': user.total_karma,
-            'has_verified_email': user.has_verified_email if hasattr(user, 'has_verified_email') else False,
+            'has_verified_email': getattr(user, 'has_verified_email', False),
             'link_karma': user.link_karma,
             'comment_karma': user.comment_karma,
-            'accept_followers': user.accept_followers if hasattr(user, 'accept_followers') else False,
+            'accept_followers': getattr(user, 'accept_followers', False),
         }
-        logger.debug(f"{reddit, username}Fetched User Info.")
+        logger.debug(f"Fetched User Info for {username}.")
         return user_data
-    except prawcore.exceptions.NotFound:
-        logger.error(f"User '{username}' not found.")
-        return None
     except Exception as e:
-        logger.error(f"Error fetching user info for '{username}': {e}")
+        logger.error(f"Error while fetching user info for '{username}': {e}")
         return None
+
 
 def fetch_and_process_comments(reddit, submission):
     """
@@ -119,7 +150,7 @@ def process_submission(reddit, submission, user_data, post_data):
     """
     user_info = None  # Initialize user_info to ensure it is available later
     author_name = submission.author.name if submission.author else 'Deleted'
-    
+
     if author_name != 'Deleted':
         user_info = fetch_user_info(reddit, author_name)
         logger.debug(f"User info for {author_name}: {user_info}")
@@ -158,11 +189,11 @@ def run_scraper():
     Main function to run the scraper.
     """
     reddit, config = setup_reddit()
-    logger.info(f"Fetching posts from {config['subreddit']}")
+    logger.debug(f"Fetching posts from {config['subreddit']}")
     posts = fetch_posts(reddit, config)
     user_data = {}
     post_data = {}
-    logger.info(f"Found {posts} posts.")
+    logger.debug(f"Found {posts} posts.")
     for submission in posts:
         process_submission(reddit, submission, user_data, post_data)
         logger.debug(f"Processed submission {submission.id}")
@@ -189,12 +220,12 @@ def run_scraper():
         logger.debug(f"Writing submission data to {post_data_file_path}")
         json.dump(post_data, submission_file, ensure_ascii=False, indent=4)
         logger.debug(f"Saved submission data to {post_data_file_path}")
-    
-    logger.info(f"Current working directory: {os.getcwd()}")
+
+    logger.debug(f"Current working directory: {os.getcwd()}")
 
 
-    logger.info('Scraping complete.')
+
 
 if __name__ == "__main__":
     run_scraper()
-    logger.info("Exiting...")
+    logger.info('Scraping complete.')
