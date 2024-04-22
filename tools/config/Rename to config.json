@@ -11,14 +11,18 @@
     "username": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
     "password": "xxxxxxxxxxxxxxxxxxxxxxxx",
     "user_agent": "Reddit Scraper (by u/Allan_QuartermainSr)",
-    "post_sort": {
-        "method": "new",
-        "limit": 10000
-    },
-    "notes": [
-        "You can choose from 'top', 'hot', 'new', 'rising', or 'controversial' for post sorting.",
-        "Account Age Threshold is set in years it can be a decimal"
-    ],
-    "karma_threshold": 5000,
-    "account_age_threshold": 2
+	"post_sort": {
+		"method": "new",
+		"limit": 100
+	},
+	"comments_limit": 500,
+	"submissions_limit": 100,
+	"notes": [
+			"You can choose from 'top', 'hot', 'new', 'rising', or 'controversial' for post sorting.",
+			"Account Age Threshold is set in years it can be a decimal"
+	],
+	"karma_threshold": 500,
+	"account_age_threshold": 0.5,
+	"inactivity_period": 3,
+	"burst_period": 1
 }

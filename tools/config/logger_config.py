@@ -2,6 +2,9 @@ import logging
 
 
 def init_logger(file="debug.log"):
+    """
+    Initialize logger.
+    """
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",

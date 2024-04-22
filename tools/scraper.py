@@ -3,6 +3,7 @@ import os
 import datetime as dt
 import time
 import prawcore
+from requests import get
 from tools.config.logger_config import init_logger
 from tools.config.reddit_login import load_config, login
 import logging
@@ -27,7 +28,7 @@ def fetch_posts(reddit, config):
     """
     logger.info("Fetching posts...")
     subreddit_names = config["subreddit"].split('+')
-    post_sort = config.get("post_sort", {"method": "top", "limit": 1000})
+    post_sort = config.get("post_sort", {"method": "new", "limit": 1000})
     sort_method = post_sort["method"]
     posts_limit = post_sort["limit"]
     all_posts = []
@@ -61,11 +62,14 @@ def fetch_posts(reddit, config):
     return all_posts
 
 
-def fetch_user_info(reddit, username):
+def fetch_user_info(reddit, username, config):
     """
-    Fetches user info from Reddit's API.
+    Fetches user info from Reddit's API using configurable limits.
     """
     logger.debug(f"Fetching user info for: {username}")
+
+    logger.debug(f"Type of username before fetch_user_info call: {type(username)}")
+
 
     if username.lower() == 'deleted':
         logger.debug(f"User '{username}' is deleted, skipping.")
@@ -79,51 +83,59 @@ def fetch_user_info(reddit, username):
         return None
 
     try:
-        if not hasattr(user, 'created_utc'):
-            logger.error(f"User '{username}' has no creation date.")
-            return None
-
-        creation_time = user.created_utc
-
-        # Get the oldest of the first 1000 comments and submissions
-        comments = list(user.comments.new(limit=1000))
-        submissions = list(user.submissions.new(limit=1000))
-
-        first_comment = comments[-1] if comments else None
-        first_submission = submissions[-1] if submissions else None
-
-        if first_comment and first_submission:
-            first_activity_time = min(first_comment.created_utc, first_submission.created_utc)
-        elif first_comment:
-            first_activity_time = first_comment.created_utc
-        elif first_submission:
-            first_activity_time = first_submission.created_utc
-        else:
-            first_activity_time = time.time()
-
-        dormant_time = first_activity_time - creation_time
-        dormant_days = dormant_time // (24 * 60 * 60)
-
-        user_data = {
-            'username': username,
-            'Karma': user.link_karma + user.comment_karma,
-            'created_utc': user.created_utc,
-            'dormant_days': dormant_days,
-            'user_is_verified': getattr(user, 'is_verified', False),
-            'awardee_karma': user.awardee_karma,
-            'awarder_karma': user.awarder_karma,
-            'total_karma': user.total_karma,
-            'has_verified_email': getattr(user, 'has_verified_email', False),
-            'link_karma': user.link_karma,
-            'comment_karma': user.comment_karma,
-            'accept_followers': getattr(user, 'accept_followers', False),
-        }
-        logger.debug(f"Fetched User Info for {username}.")
-        return user_data
+        return fetch_comments_from_submissions(user, username, config)
     except Exception as e:
         logger.error(f"Error while fetching user info for '{username}': {e}")
         return None
 
+def fetch_comments_from_submissions(user, username, config):
+    if not hasattr(user, 'created_utc'):
+        logger.error(f"User '{username}' has no creation date.")
+        return None
+
+    creation_time = user.created_utc
+
+    # Use configurable limits from the config
+    comments_limit = config.get("comments_limit", 1000)  # Default to 100 if not set
+    submissions_limit = config.get("submissions_limit", 1000)  # Default to 25 if not set
+
+    logger.debug(f"Comments limit: {comments_limit}")
+    logger.debug(f"Submissions limit: {submissions_limit}")
+
+    comments = list(user.comments.new(limit=comments_limit))
+    submissions = list(user.submissions.new(limit=submissions_limit))
+
+    first_comment = comments[-1] if comments else None
+    first_submission = submissions[-1] if submissions else None
+
+    if first_comment and first_submission:
+        first_activity_time = min(first_comment.created_utc, first_submission.created_utc)
+    elif first_comment:
+        first_activity_time = first_comment.created_utc
+    elif first_submission:
+        first_activity_time = first_submission.created_utc
+    else:
+        first_activity_time = time.time()
+
+    dormant_time = first_activity_time - creation_time
+    dormant_days = dormant_time // (24 * 60 * 60)
+
+    user_data = {
+        'username': username,
+        'Karma': user.link_karma + user.comment_karma,
+        'created_utc': user.created_utc,
+        'dormant_days': dormant_days,
+        'user_is_verified': getattr(user, 'is_verified', False),
+        'awardee_karma': user.awardee_karma,
+        'awarder_karma': user.awarder_karma,
+        'total_karma': user.total_karma,
+        'has_verified_email': getattr(user, 'has_verified_email', False),
+        'link_karma': user.link_karma,
+        'comment_karma': user.comment_karma,
+        'accept_followers': getattr(user, 'accept_followers', False),
+    }
+    logger.debug(f"Fetched User Info for {username}.")
+    return user_data
 
 def fetch_and_process_comments(reddit, submission):
     """
@@ -143,8 +155,7 @@ def fetch_and_process_comments(reddit, submission):
         and comment.author.name.lower() != "reddit"
     ]
 
-
-def process_submission(reddit, submission, user_data, post_data):
+def process_submission(config, reddit, submission, user_data, post_data):
     """
     Processes a single submission, extracting data and comments.
     """
@@ -152,7 +163,7 @@ def process_submission(reddit, submission, user_data, post_data):
     author_name = submission.author.name if submission.author else 'Deleted'
 
     if author_name != 'Deleted':
-        user_info = fetch_user_info(reddit, author_name)
+        user_info = fetch_user_info(reddit, author_name, config)  # Corrected order: reddit, author_name, config
         logger.debug(f"User info for {author_name}: {user_info}")
 
     comments_data = fetch_and_process_comments(reddit, submission)
@@ -161,7 +172,8 @@ def process_submission(reddit, submission, user_data, post_data):
         comment_author = comment['author']
         logger.debug(f"Comment author: {comment_author}")
         if comment_author != 'Deleted' and comment_author not in user_data:
-            comment_user_info = fetch_user_info(reddit, comment_author)
+            # Corrected order of arguments
+            comment_user_info = fetch_user_info(reddit, comment_author, config)
             logger.debug(f"Comment user info: {comment_user_info}")
             if comment_user_info:
                 user_data[comment_author] = comment_user_info
@@ -193,9 +205,9 @@ def run_scraper():
     posts = fetch_posts(reddit, config)
     user_data = {}
     post_data = {}
-    logger.debug(f"Found {posts} posts.")
+    logger.debug(f"Found {len(posts)} posts.")
     for submission in posts:
-        process_submission(reddit, submission, user_data, post_data)
+        process_submission(config, reddit, submission, user_data, post_data)  # Corrected order and added config
         logger.debug(f"Processed submission {submission.id}")
 
     # Saving logic here
@@ -203,7 +215,6 @@ def run_scraper():
     logger.debug(f"Data analysis directory: {data_analysis_dir}")
     if not os.path.exists(data_analysis_dir):
         logger.debug("Data analysis directory does not exist, creating...")
-        # Create the directory if it doesn't exist already
         os.makedirs(data_analysis_dir)
         logger.debug(f"Created directory {data_analysis_dir}")
 
@@ -222,9 +233,6 @@ def run_scraper():
         logger.debug(f"Saved submission data to {post_data_file_path}")
 
     logger.debug(f"Current working directory: {os.getcwd()}")
-
-
-
 
 if __name__ == "__main__":
     run_scraper()

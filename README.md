@@ -135,27 +135,31 @@ First, configure your config.json file in tools/config directory with your Reddi
 ```json
 {
     "database": {
-        "dbname": "reddit_analysis",
-        "user": "postgres",
-        "password": "password used during installation",
-        "host": "localhost"
-    },
-    "subreddit": "SUBREDDIT_NAME",
-    "client_id": "YOUR_CLIENT_ID",
-    "client_secret": "YOUR_CLIENT_SECRET",
-    "username": "YOUR_REDDIT_USERNAME",
-    "password": "YOUR_REDDIT_PASSWORD",
-    "user_agent": "Reddit Scraper (by u/YOUR_USERNAME)",
-    "post_sort": {
-        "method": "new",
-        "limit": 500
-    },
-    "notes": [
-        "You can choose from 'top', 'hot', 'new', 'rising', or 'controversial' for post sorting.",
-        "Account Age Threshold is set in years; it can be a decimal."
-    ],
-    "karma_threshold": 2000,
-    "account_age_threshold": 0.5
+		"dbname": "reddit_analysis",
+		"user": "postgres",
+		"password": "xxxxxxxxxxx",
+		"host": "localhost"
+	},
+    "subreddit": "xxxxxxxxxxxxxxxx",
+    "client_id": "xxxxxxxxxxxxxxxxx",
+    "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "username": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "password": "xxxxxxxxxxxxxxxxxxxxxxxx",
+    "user_agent": "Reddit Scraper (by u/Allan_QuartermainSr)",
+	"post_sort": {
+		"method": "new",
+		"limit": 100
+	},
+	"comments_limit": 500,
+	"submissions_limit": 100,
+	"notes": [
+			"You can choose from 'top', 'hot', 'new', 'rising', or 'controversial' for post sorting.",
+			"Account Age Threshold is set in years it can be a decimal"
+	],
+	"karma_threshold": 500,
+	"account_age_threshold": 0.5,
+	"inactivity_period": 3,
+	"burst_period": 1
 }
 ```
 

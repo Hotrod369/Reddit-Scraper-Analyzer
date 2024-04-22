@@ -16,12 +16,18 @@ logger.info("User analysis Basic logging set")
 init_logger()
 
 def load_config():
+    """
+    The `load_config` function loads the configuration from a JSON file.
+    """
     with open('tools/config/config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     logger.info("Config loaded")
     return config
 
 def connect_to_database(config):
+    """
+    The `connect_to_database` function connects to a PostgreSQL database using the provided configuration.
+    """
     try:
         return psycopg2.connect(
             dbname=config['database']['dbname'],
@@ -35,30 +41,103 @@ def connect_to_database(config):
         return None
 
 def fetch_users(conn):
+    """
+    The `fetch_users` function retrieves users data from a database using a cursor and logs
+    relevant information.
+    """
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT username, karma, awardee_karma, awarder_karma, total_karma, has_verified_email,\
-                link_karma, comment_karma, accepts_followers, created_utc, dormant_days FROM users")
+            # Corrected SQL query that performs a left join and aggregates data correctly
+            cur.execute("""
+                SELECT
+                    users.username,
+                    users.karma,
+                    users.awardee_karma,
+                    users.awarder_karma,
+                    users.total_karma,
+                    users.has_verified_email,
+                    users.link_karma,
+                    users.comment_karma,
+                    users.accepts_followers,
+                    users.created_utc,
+                    users.dormant_days,
+                    array_agg(submissions.created_utc ORDER BY submissions.created_utc) AS post_times
+                FROM users
+                LEFT JOIN submissions ON users.username = submissions.user_username
+                GROUP BY users.username
+            """)
             return cur.fetchall()
     except Exception as e:
         logger.error(f"Error fetching users from database: {e}")
-        logger.info("Fetched Users")
         return []
+
+def analyze_burst_activity(post_times, config):
+    """
+    Analyzes the burst activity of a user by comparing the time differences between consecutive posts,
+    adjusted to handle TimedeltaIndex with iloc.
+    """
+    # Fetch period values from the config
+    inactivity_days = config.get('inactivity_period', 30)  # Default to 30 if not set
+    burst_days = config.get('burst_period', 2)  # Default to 2 if not set
+
+    # Define inactivity and burst activity periods using values from the config
+    inactivity_period = pd.to_timedelta(f"{inactivity_days} days")
+    burst_period = pd.to_timedelta(f"{burst_days} days")
+
+    # Filter out None values and ensure the list is not empty
+    if not post_times or all(x is None for x in post_times):
+        return False
+
+    # Convert to pandas datetime series and drop any NaT or NaN entries
+    times = pd.to_datetime(post_times, unit='s').dropna()
+
+    # Ensure times is not empty and has valid datetime entries
+    if times.empty:
+        return False
+
+    # Calculate time differences between consecutive timestamps and convert to Series
+    time_diffs = pd.Series(times.diff()[1:])  # Skip the first entry which is NaT
+
+    # Check for burst activity
+    burst_activity_exists = False
+    for i in range(len(time_diffs) - 1):
+        if time_diffs.iloc[i] > inactivity_period:
+            # Check if the following entries are within the burst period
+            for j in range(1, len(time_diffs) - i):
+                if time_diffs.iloc[i + j] < burst_period:
+                    burst_activity_exists = True
+                    break
+            if burst_activity_exists:
+                break
+
+    return burst_activity_exists
+
+# Example usage (commented out for now):
+# config = {"inactivity_period": 30, "burst_period": 2}
+# post_times = [1609459200, 1612137600, 1612224000]  # Unix timestamps
+# print(analyze_burst_activity_fixed(post_times, config))
 
 
 def analyze_users(users, config):
+    """
+    Analyzes users and returns a list of dictionaries containing user data.
+    """
     logger.info("Analyzing users")
     results = []
     for user in users:
         # Each 'user' is a list or tuple with the correct order of values
         # Adjust the unpacking according to the actual structure of 'user'
         username, karma, awardee_karma, awarder_karma, total_karma, has_verified_email, link_karma,\
-            comment_karma, accepts_followers, created_utc, dormant_days = user
+            comment_karma, accepts_followers, created_utc, dormant_days, post_times = user
 
         account_age_years = calculate_account_age(created_utc)
         criteria_met_age = identify_young_accounts(account_age_years, config)
         criteria_met_karma = identify_low_karma_accounts(total_karma, config)
         criteria_met = criteria_met_age or criteria_met_karma
+
+        # New burst activity analysis
+        burst_activity = analyze_burst_activity(post_times, config)
+        logger.info(f"Burst activity for {username}: {burst_activity}")
 
         user_data = {
             'Username': username,
@@ -76,40 +155,38 @@ def analyze_users(users, config):
             'Total Karma': total_karma,
             'Low Karma': 'Low Karma' if criteria_met_karma else '',
             'Criteria': 'Criteria Met' if criteria_met else 'Not Met',
-            'Young Account': 'Young Account' if criteria_met_age else ''
+            'Young Account': 'Young Account' if criteria_met_age else '',
+            'Burst Activity': 'Yes' if burst_activity else 'No',  # Add burst activity to the results
         }
         results.append(user_data)
         logger.info("Analyzed users")
     return results
 
 def write_to_excel(analyzed_users, file_path):
+    """
+    Writes user data to an Excel file.
+    """
     logger.info("Writing users analysis results to Excel file")
-    # Create a new Excel workbook and active sheet
-    # Create a new Excel workbook and active sheet
     workbook = Workbook()
     sheet = workbook.active
-    if sheet is None:
+    if not sheet:
         sheet = workbook.create_sheet(title="User Data Analysis")
     else:
         sheet.title = "User Data Analysis"
 
-    # Explicitly cast sheet to Worksheet to satisfy the type checker
-    assert isinstance(sheet, Worksheet), "Active sheet is not a Worksheet instance"
-
-    headers = ["Username", "Karma", "Awardee Karma", "Awarder Karma",
-            "Has Verified Email", "Link Karma", "Comment Karma", "Accepts Followers",
-            "Account Created", "Account Age", "Total Karma", "Low Karma", "Criteria",
-            "Young Account", "Dormant Days"]
+    headers = ["Username", "Karma", "Awardee Karma", "Awarder Karma", "Has Verified Email", 
+                "Link Karma", "Comment Karma", "Accepts Followers", "Account Created", 
+                "Account Age", "Total Karma", "Low Karma", "Criteria", "Young Account", 
+                "Dormant Days", "Burst Activity"]
     sheet.append(headers)
 
+    # Append each user's data to the sheet
     for user_data in analyzed_users:
-        row = []
-    for header in headers:
-        value = user_data.get(header)
-        if value is None:
-            value = "N/A"  # Replace None with "N/A"
-        row.append(value)
-    sheet.append(row)
+        row = [user_data.get(header, "N/A") for header in headers]  # Use .get() to handle missing keys safely
+        sheet.append(row)
+
+    workbook.save(file_path)
+    logger.info(f"User analysis results saved to {file_path}")
 
     validate_data = lambda headers, analyzed_users:\
         [header for header in headers if header not in analyzed_users[0]]
@@ -127,9 +204,10 @@ def write_to_excel(analyzed_users, file_path):
     workbook.save(file_path)
     logger.info(f"Users analysis results saved to {file_path}")
 
-
-
 def user_analysis():
+    """
+    The `user_analysis` function orchestrates the user data analysis process.
+    """
     logger.info("Starting user analysis")
     # Load the configuration file and connect to the database
     config = load_config()
@@ -139,9 +217,6 @@ def user_analysis():
         write_to_excel(analyzed_users, 'analysis_results/users_analysis.xlsx')
         conn.close()
         logger.info("Database connection closed.")
-
-
-
 
 if __name__ == "__main__":
     user_analysis()

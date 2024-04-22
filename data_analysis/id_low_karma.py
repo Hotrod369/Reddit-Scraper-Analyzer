@@ -7,6 +7,9 @@ logger.info(" id_low_karma Basic logging set")
 init_logger()
 
 def identify_low_karma_accounts(total_karma, config):
+    """
+    Identify accounts with low karma based on a specified threshold.
+    """
     try:
         criteria_met_karma = []
         logger.info("Identifying low karma accounts")

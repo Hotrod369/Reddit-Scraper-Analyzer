@@ -7,6 +7,9 @@ logger.info("ID young Accounts Basic logging set")
 init_logger()
 
 def identify_young_accounts(account_age_years, config):
+    """
+    Identify accounts with an age below a specified threshold.
+    """
     criteria_met_age = []
     try:
         account_age_threshold = config.get("account_age_threshold", 2)  # Default to 2 years if not specified
