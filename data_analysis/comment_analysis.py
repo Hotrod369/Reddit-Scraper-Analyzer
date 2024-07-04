@@ -124,8 +124,7 @@ def frequency_distribution(tokens):
     # Return the frequency distribution as a dictionary
     return dict(freq_dist)
 
-
-def find_ngrams(tokens, n=2):  # Change n for bigrams (2), trigrams (3), etc.
+def find_ngrams(tokens, n=2):
     """
     Find n-grams in a list of tokens.
     """
@@ -200,6 +199,7 @@ try:
     logger.info("Comment analysis completed.")
 except Exception as e:
     logger.exception(f"An error occurred: {e}")
+
 def process_comment(author, comment_id, body, duplicates, sheet, SIA):
     is_duplicate = 'Yes' if body.strip().lower() in duplicates else 'No'
     sentiment_score = SIA.polarity_scores(body)['compound']
@@ -214,7 +214,6 @@ def process_comment(author, comment_id, body, duplicates, sheet, SIA):
     bigram_list = list(ngrams(tokens, 2))
     common_bigrams = ', '.join([' '.join(pair) for pair in bigram_list[:5]])
     sheet.append([author, comment_id, f"{body[:100]}...", sentiment_cell_value, entities, common_bigrams, diversity_cell_value, is_duplicate])
-
 
 try:
     logger.info("Connecting to the database.")
@@ -255,6 +254,5 @@ finally:
     if conn:
         conn.close()
         logger.info("Database connection closed.")
-
 
 logger.info("All Operations Complete")

@@ -6,7 +6,6 @@ from openpyxl.worksheet.worksheet import Worksheet
 from tools.config.logger_config import init_logger
 import logging
 
-
 logger = logging.getLogger(__name__)
 logger.info("Submission Analysis Basic logging set")
 init_logger()
