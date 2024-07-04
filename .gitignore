@@ -18,6 +18,7 @@ pyproject.toml
 debug.log
 reddit_moderator_helper.egg-info
 analysis_results/
+nltk_data/
 
 
 # C extensions

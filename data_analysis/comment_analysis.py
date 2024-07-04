@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import nltk
 import psycopg2
@@ -30,28 +31,33 @@ with open('tools/config/config.json', 'r', encoding='utf-8') as f:
     host = db_config['host']
     logger.info("Accessed database connection parameters")
 
-def download_nltk_data():
+def load_nltk_data():
     """
-    Downloads the required NLTK resources.
+    Downloads the required NLTK resources only when
+    necessary data is not already downloaded.
     """
-    nltk_resources = ['vader_lexicon',
-                    'punkt',
-                    'averaged_perceptron_tagger',
-                    'maxent_ne_chunker',
-                    'words'
-    ]
-    for resource in nltk_resources:
-        nltk.download(resource)
-    logger.info("NLTK resources downloaded.")
+    nltk_data_path = './nltk_data'  # Define your local path for NLTK data
+    if not os.path.exists(nltk_data_path):
+        os.makedirs(nltk_data_path)
 
-download_nltk_data()
+    # Ensure NLTK knows where to find the local data
+    nltk.data.path.append(nltk_data_path)
+
+    # Load specific resources manually if they are not already downloaded
+    if not os.path.exists(os.path.join(nltk_data_path, 'vader_lexicon')):
+        nltk.download('vader_lexicon', download_dir=nltk_data_path)
+
+    if not os.path.exists(os.path.join(nltk_data_path, 'tokenizers/punkt')):
+        nltk.download('punkt', download_dir=nltk_data_path)
+
+load_nltk_data()
 
 # Calculate average sentiment score for comments in a submission
 def run_analyze_com(comments):
     """
     Analyze sentiment of comments and return analyzed comments.
     """
-    logger.info("Running analyze_com")   
+    logger.info("Running analyze_com")
     if not comments:
         logger.info("No comments to analyze.")
         return []
@@ -87,7 +93,7 @@ def find_duplicate_comments(comments):
     logger.info("Finding duplicate comments")
     # sourcery skip: inline-immediately-returned-variable
     # Using a dictionary to count occurrences of each comment body
-    
+
     comment_count = {}
     for _, _, body in comments:
         normalized_body = body.strip().lower()  # Normalize the comment text for accurate comparison
@@ -96,7 +102,6 @@ def find_duplicate_comments(comments):
     global duplicates
     duplicates = {body for body, count in comment_count.items() if count > 1}
     return duplicates
-
 
 def tokenize_and_tag(text):
     """
@@ -123,7 +128,6 @@ def frequency_distribution(tokens):
     logger.info(f"Frequency distribution {freq_dist}")
     # Return the frequency distribution as a dictionary
     return dict(freq_dist)
-
 
 def find_ngrams(tokens, n=2):  # Change n for bigrams (2), trigrams (3), etc.
     """
@@ -215,7 +219,6 @@ def process_comment(author, comment_id, body, duplicates, sheet, SIA):
     common_bigrams = ', '.join([' '.join(pair) for pair in bigram_list[:5]])
     sheet.append([author, comment_id, f"{body[:100]}...", sentiment_cell_value, entities, common_bigrams, diversity_cell_value, is_duplicate])
 
-
 try:
     logger.info("Connecting to the database.")
     conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host)
@@ -255,6 +258,5 @@ finally:
     if conn:
         conn.close()
         logger.info("Database connection closed.")
-
 
 logger.info("All Operations Complete")
