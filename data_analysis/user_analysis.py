@@ -1,10 +1,10 @@
 import json
 import datetime as dt
-import json
 from openpyxl import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet  # noqa: F401
 import pandas as pd
 import psycopg2
+from tqdm import tqdm
 from data_analysis.cal_acc_age import calculate_account_age
 from data_analysis.id_low_karma import identify_low_karma_accounts
 from data_analysis.id_young_acc import identify_young_accounts
@@ -124,7 +124,7 @@ def analyze_users(users, config):
     """
     logger.info("Analyzing users")
     results = []
-    for user in users:
+    for user in tqdm(users, desc=f"Analyzing users ({len(users)})"):
         # Each 'user' is a list or tuple with the correct order of values
         # Adjust the unpacking according to the actual structure of 'user'
         username, karma, awardee_karma, awarder_karma, total_karma, has_verified_email, link_karma,\
@@ -188,8 +188,8 @@ def write_to_excel(analyzed_users, file_path):
     workbook.save(file_path)
     logger.info(f"User analysis results saved to {file_path}")
 
-    validate_data = lambda headers, analyzed_users:\
-        [header for header in headers if header not in analyzed_users[0]]
+    def validate_data(headers, analyzed_users):
+        return [header for header in headers if header not in analyzed_users[0]]
 
     if missing_data := validate_data(headers, analyzed_users):
         logger.error(f"Missing data detected: {missing_data}")

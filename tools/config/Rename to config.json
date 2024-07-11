@@ -10,7 +10,7 @@
     "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "username": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
     "password": "xxxxxxxxxxxxxxxxxxxxxxxx",
-    "user_agent": "Reddit Scraper (by u/Allan_QuartermainSr)",
+    "user_agent": "Reddit Scraper (by u/StinkyPete312)",
 	"post_sort": {
 		"method": "new",
 		"limit": 100

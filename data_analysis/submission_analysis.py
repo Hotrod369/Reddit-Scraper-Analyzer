@@ -2,6 +2,7 @@ import json
 import os
 import nltk
 import psycopg2
+from tqdm import tqdm
 from nltk.sentiment import SentimentIntensityAnalyzer
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -135,8 +136,8 @@ def submission_analysis():
     load_nltk_data()
     config = load_config()
     if conn := connect_to_database(config):
-        submissions = fetch_data(conn)
-        analyzed_data = analyze_data(submissions)
+        submissions = tqdm(fetch_data(conn), desc="Fetching submissions")
+        analyzed_data = tqdm(analyze_data(submissions), desc="Analyzing data")
         write_to_excel(analyzed_data, 'analysis_results/submission_analysis.xlsx')
         conn.close()
         logger.info("Database connection closed.")

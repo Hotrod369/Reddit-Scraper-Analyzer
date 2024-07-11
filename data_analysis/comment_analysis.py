@@ -3,12 +3,13 @@ import os
 import re
 import nltk
 import psycopg2
-from nltk import FreqDist, bigrams, ngrams, pos_tag
+from nltk import FreqDist, ngrams, pos_tag
 from nltk.chunk import ne_chunk
 from nltk.sentiment import SentimentIntensityAnalyzer
 from nltk.tokenize import word_tokenize
 from openpyxl import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet  # noqa: F401
+from tqdm import tqdm
 from tools.config.logger_config import init_logger
 import logging
 
@@ -63,7 +64,7 @@ def run_analyze_com(comments):
         return []
 
     analyzed_comments = []
-    for comment in comments:
+    for comment in tqdm(comments, desc="Analyzing Comments"):
         try:
             id, author, body, score, submission_id = comment
             sentiment_analysis = SIA.polarity_scores(body)
@@ -91,21 +92,22 @@ def find_duplicate_comments(comments):
     Find duplicate comments in a list of comments.
     """
     logger.info("Finding duplicate comments")
-    # sourcery skip: inline-immediately-returned-variable
     # Using a dictionary to count occurrences of each comment body
 
     comment_count = {}
-    for _, _, body in comments:
+    for comment in tqdm(comments, desc="Finding Duplicate Comments"):
+        body = comment[2]  # Assuming the body is the third element in the tuple
         normalized_body = body.strip().lower()  # Normalize the comment text for accurate comparison
         comment_count[normalized_body] = comment_count.get(normalized_body, 0) + 1
 
-    global duplicates
     duplicates = {body for body, count in comment_count.items() if count > 1}
+    logger.info(f"Found {len(duplicates)} duplicate comments.")
+    logger.info("Duplicate comment analysis complete")
     return duplicates
 
 def tokenize_and_tag(text):
     """
-    Perform named entity recognition on tagged tokens.
+    Tokenize text and perform part-of-speech tagging.
     """
     tokens = word_tokenize(text)
     logger.info(f"Tokens {tokens}")
@@ -172,8 +174,8 @@ try:
     logger.info("Fetched comments for analysis.")
     logger.info("Analyzing Comments This Will Take Some time.")
 
-    for author, comment_id, body in comments:
-        logger.info("Performing sentiment analysis")
+    for author, comment_id, body in tqdm(comments, desc="Analyzing Comments"):
+        logger.debug("Performing sentiment analysis")
         # Perform sentiment analysis
         sentiment_score = SIA.polarity_scores(body)['compound']
         logger.info("Sentiment analysis complete")
@@ -205,6 +207,9 @@ try:
 except Exception as e:
     logger.exception(f"An error occurred: {e}")
 def process_comment(author, comment_id, body, duplicates, sheet, SIA):
+    """
+    Process and analyze a single comment.
+    """
     is_duplicate = 'Yes' if body.strip().lower() in duplicates else 'No'
     sentiment_score = SIA.polarity_scores(body)['compound']
     sentiment_label = "Positive" if sentiment_score >= 0.05 else "Negative" if sentiment_score <= -0.05 else "Neutral"
@@ -218,6 +223,53 @@ def process_comment(author, comment_id, body, duplicates, sheet, SIA):
     bigram_list = list(ngrams(tokens, 2))
     common_bigrams = ', '.join([' '.join(pair) for pair in bigram_list[:5]])
     sheet.append([author, comment_id, f"{body[:100]}...", sentiment_cell_value, entities, common_bigrams, diversity_cell_value, is_duplicate])
+
+def analyze_comments():
+    """
+    Main function to analyze comments.
+    """
+    try:
+        logger.info("Connecting to the database.")
+        conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host)
+        cur = conn.cursor()
+        logger.info("Connected to the database successfully.")
+
+        # Fetch comments for analysis
+        cur.execute("SELECT author, id, body, score, submission_id FROM comments")
+        comments = cur.fetchall()
+        logger.info("Fetched comments for analysis.")
+
+        # Find duplicates before processing comments
+        duplicates = find_duplicate_comments(comments)
+
+        # Specify the Excel file path and save the workbook
+        EXCEL_FILE_PATH = 'analysis_results/comment_analysis.xlsx'
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Comment Data Analysis"
+        sheet.append(["Author", "Comment ID", "Comment Body", "Sentiment Score", "Named Entities", "Common Bigrams", "Lexical Diversity", "Duplicate"])
+
+        for author, comment_id, body, score, submission_id in tqdm(comments, desc="Processing Comments"):
+            process_comment(author, comment_id, body, duplicates, sheet, SIA)
+
+        # Save the workbook
+        workbook.save(EXCEL_FILE_PATH)
+        logger.info(f"NLTK analysis results saved to {EXCEL_FILE_PATH}")
+
+        conn.commit()
+        logger.info("Comment analysis completed.")
+
+    except Exception as e:
+        logger.exception(f"An error occurred: {e}")
+
+    finally:
+        if conn:
+            conn.close()
+            logger.info("Database connection closed.")
+
+logger.info("Starting comment analysis...")
+analyze_comments()
+logger.info("Comment analysis complete.")
 
 try:
     logger.info("Connecting to the database.")

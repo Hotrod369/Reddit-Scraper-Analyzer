@@ -1,9 +1,11 @@
 import json
 import os
-import datetime as dt
+import datetime as dt  # noqa: F401
 import time
 import prawcore
-from requests import get
+from prawcore.exceptions import TooManyRequests
+from tqdm import tqdm
+from requests import get  # noqa: F401
 from tools.config.logger_config import init_logger
 from tools.config.reddit_login import load_config, login
 import logging
@@ -12,6 +14,14 @@ logger = logging.getLogger(__name__)
 logger.info("Scraper Basic logging set")
 init_logger()
 
+def handle_rate_limit(retry_after):
+    if retry_after is None:
+        logger.warning("Rate limit exceeded but retry_after time is not set. Using a default sleep of 1 second.")
+        time.sleep(1)
+    else:
+        logger.warning(f"Rate limit exceeded. Sleeping for {retry_after} seconds.")
+        time.sleep(retry_after + 1)  # Adding an extra second for safety
+
 def setup_reddit():
     """
     Sets up the Reddit instance for scraping data, logging in, and loading the target subreddit.
@@ -19,6 +29,7 @@ def setup_reddit():
     logger.debug("Setting up Reddit instance...")
     config = load_config()
     reddit = login(config)
+    reddit.config.ratelimit_seconds = 60  # PRAW will sleep for 60 seconds when hitting the rate limit
     logger.info("Logged into Reddit.")
     return reddit, config
 
@@ -33,7 +44,7 @@ def fetch_posts(reddit, config):
     posts_limit = post_sort["limit"]
     all_posts = []
 
-    for subreddit_name in subreddit_names:
+    for subreddit_name in tqdm(subreddit_names, desc="Fetching subreddits"):
         try:
             subreddit = reddit.subreddit(subreddit_name)
             logger.debug(f"Fetching {sort_method} posts from {subreddit_name} with limit {posts_limit}.")
@@ -52,6 +63,9 @@ def fetch_posts(reddit, config):
                 raise ValueError(f"Unsupported sort method: {sort_method}")
 
             all_posts.extend(posts)
+        except TooManyRequests as e:
+            handle_rate_limit(e.response.headers.get('retry-after'))
+            continue
         except prawcore.exceptions.Redirect:
             logger.error(f"Failed to fetch posts from '{subreddit_name}'. This may be due to a typo in the subreddit name, the subreddit being private, banned, or non-existent. Please check the subreddit name in the config file.")
             continue
@@ -61,15 +75,12 @@ def fetch_posts(reddit, config):
 
     return all_posts
 
-
 def fetch_user_info(reddit, username, config):
     """
     Fetches user info from Reddit's API using configurable limits.
     """
     logger.debug(f"Fetching user info for: {username}")
-
     logger.debug(f"Type of username before fetch_user_info call: {type(username)}")
-
 
     if username.lower() == 'deleted':
         logger.debug(f"User '{username}' is deleted, skipping.")
@@ -94,10 +105,9 @@ def fetch_comments_from_submissions(user, username, config):
         return None
 
     creation_time = user.created_utc
-
     # Use configurable limits from the config
-    comments_limit = config.get("comments_limit", 1000)  # Default to 100 if not set
-    submissions_limit = config.get("submissions_limit", 1000)  # Default to 25 if not set
+    comments_limit = config.get("comments_limit", 1000) # Default to 100 if not set
+    submissions_limit = config.get("submissions_limit", 1000) # Default to 25 if not set
 
     logger.debug(f"Comments limit: {comments_limit}")
     logger.debug(f"Submissions limit: {submissions_limit}")
@@ -141,19 +151,26 @@ def fetch_and_process_comments(reddit, submission):
     """
     Fetches and processes comments for a given submission on Reddit.
     """
-    submission.comments.replace_more(limit=None)
-    logger.debug(f"Processing comments for submission {submission.id}")
-    return [
-        {
-            'author': comment.author.name if comment.author else 'Deleted',
-            'body': comment.body,
-            'score': comment.score,
-            'id': comment.id,
-        }
-        for comment in submission.comments.list()
-        if comment.author and comment.author.name.lower() != "automoderator"
-        and comment.author.name.lower() != "reddit"
-    ]
+    try:
+        submission.comments.replace_more(limit=None)
+        logger.debug(f"Processing comments for submission {submission.id}")
+        return [
+            {
+                'author': comment.author.name if comment.author else 'Deleted',
+                'body': comment.body,
+                'score': comment.score,
+                'id': comment.id,
+            }
+            for comment in tqdm(submission.comments.list(), desc=f"Fetching comments for {submission.id}")
+            if comment.author and comment.author.name.lower() != "automoderator"
+            and comment.author.name.lower() != "reddit"
+        ]
+    except TooManyRequests as e:
+        handle_rate_limit(e.response.headers.get('retry-after'))
+        return []
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while fetching comments for submission '{submission.id}': {e}")
+        return []
 
 def process_submission(config, reddit, submission, user_data, post_data):
     """
@@ -168,7 +185,7 @@ def process_submission(config, reddit, submission, user_data, post_data):
 
     comments_data = fetch_and_process_comments(reddit, submission)
     logger.debug(f"Comments for {submission.id}: {comments_data}")
-    for comment in comments_data:
+    for comment in tqdm(comments_data, desc=f"Processing comments for {submission.id}"):
         comment_author = comment['author']
         logger.debug(f"Comment author: {comment_author}")
         if comment_author != 'Deleted' and comment_author not in user_data:
@@ -195,19 +212,21 @@ def process_submission(config, reddit, submission, user_data, post_data):
         user_data[author_name] = user_info
         logger.debug(f"Added user info for {author_name}")
 
-
 def run_scraper():
     """
     Main function to run the scraper.
     """
     reddit, config = setup_reddit()
+    if not reddit:
+        logger.error("Scraping aborted due to configuration errors.")
+        return
     logger.debug(f"Fetching posts from {config['subreddit']}")
     posts = fetch_posts(reddit, config)
     user_data = {}
     post_data = {}
     logger.debug(f"Found {len(posts)} posts.")
-    for submission in posts:
-        process_submission(config, reddit, submission, user_data, post_data)  # Corrected order and added config
+    for submission in tqdm(posts, desc="Processing submissions"):
+        process_submission(config, reddit, submission, user_data, post_data)
         logger.debug(f"Processed submission {submission.id}")
 
     # Saving logic here

@@ -18,6 +18,8 @@ pyproject.toml
 debug.log
 reddit_moderator_helper.egg-info
 analysis_results/
+model.pkl
+sklearn-env
 nltk_data/
 
 
