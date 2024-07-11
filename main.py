@@ -17,8 +17,6 @@ import os
 import time
 import logging
 from tools.config.logger_config import init_logger
-from tools.config.logger_config import init_logger, logging
-
 
 logger = logging.getLogger(__name__)
 logger.info("Main Basic logging set")
@@ -45,7 +43,6 @@ def main():
     file1_path = "analysis_results/user_data.json"
     file2_path = "analysis_results/submission_data.json"
 
-
     from tools.scraper import run_scraper
     # Run the scraper package
     run_scraper()
@@ -64,14 +61,12 @@ def main():
     with open(file1_path, 'r', encoding='utf-8') as f:
         user_data = json.load(f)
     with open(file2_path, 'r', encoding='utf-8') as f:
-        submission_data = json.load(f)
-
+        submission_data = json.load(f)  # noqa: F841
 
     from tools.json_to_db import main
 
     logger.info('Converting JSON to database')
     main()  # Pass both data sets
-
 
     from data_analysis.comment_analysis import run_analyze_com
 

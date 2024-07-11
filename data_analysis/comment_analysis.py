@@ -1,13 +1,15 @@
 import json
+import os
 import re
 import nltk
 import psycopg2
-from nltk import FreqDist, bigrams, ngrams, pos_tag
+from nltk import FreqDist, ngrams, pos_tag
 from nltk.chunk import ne_chunk
 from nltk.sentiment import SentimentIntensityAnalyzer
 from nltk.tokenize import word_tokenize
 from openpyxl import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet  # noqa: F401
+from tqdm import tqdm
 from tools.config.logger_config import init_logger
 import logging
 
@@ -30,34 +32,39 @@ with open('tools/config/config.json', 'r', encoding='utf-8') as f:
     host = db_config['host']
     logger.info("Accessed database connection parameters")
 
-def download_nltk_data():
+def load_nltk_data():
     """
-    Downloads the required NLTK resources.
+    Downloads the required NLTK resources only when
+    necessary data is not already downloaded.
     """
-    nltk_resources = ['vader_lexicon',
-                    'punkt',
-                    'averaged_perceptron_tagger',
-                    'maxent_ne_chunker',
-                    'words'
-    ]
-    for resource in nltk_resources:
-        nltk.download(resource)
-    logger.info("NLTK resources downloaded.")
+    nltk_data_path = './nltk_data'  # Define your local path for NLTK data
+    if not os.path.exists(nltk_data_path):
+        os.makedirs(nltk_data_path)
 
-download_nltk_data()
+    # Ensure NLTK knows where to find the local data
+    nltk.data.path.append(nltk_data_path)
+
+    # Load specific resources manually if they are not already downloaded
+    if not os.path.exists(os.path.join(nltk_data_path, 'vader_lexicon')):
+        nltk.download('vader_lexicon', download_dir=nltk_data_path)
+
+    if not os.path.exists(os.path.join(nltk_data_path, 'tokenizers/punkt')):
+        nltk.download('punkt', download_dir=nltk_data_path)
+
+load_nltk_data()
 
 # Calculate average sentiment score for comments in a submission
 def run_analyze_com(comments):
     """
     Analyze sentiment of comments and return analyzed comments.
     """
-    logger.info("Running analyze_com")   
+    logger.info("Running analyze_com")
     if not comments:
         logger.info("No comments to analyze.")
         return []
 
     analyzed_comments = []
-    for comment in comments:
+    for comment in tqdm(comments, desc="Analyzing Comments"):
         try:
             id, author, body, score, submission_id = comment
             sentiment_analysis = SIA.polarity_scores(body)
@@ -85,22 +92,21 @@ def find_duplicate_comments(comments):
     Find duplicate comments in a list of comments.
     """
     logger.info("Finding duplicate comments")
-    # sourcery skip: inline-immediately-returned-variable
     # Using a dictionary to count occurrences of each comment body
-    
     comment_count = {}
-    for _, _, body in comments:
+    for comment in tqdm(comments, desc="Finding Duplicate Comments"):
+        body = comment[2]  # Assuming the body is the third element in the tuple
         normalized_body = body.strip().lower()  # Normalize the comment text for accurate comparison
         comment_count[normalized_body] = comment_count.get(normalized_body, 0) + 1
 
-    global duplicates
     duplicates = {body for body, count in comment_count.items() if count > 1}
+    logger.info(f"Found {len(duplicates)} duplicate comments.")
+    logger.info("Duplicate comment analysis complete")
     return duplicates
-
 
 def tokenize_and_tag(text):
     """
-    Perform named entity recognition on tagged tokens.
+    Tokenize text and perform part-of-speech tagging.
     """
     tokens = word_tokenize(text)
     logger.info(f"Tokens {tokens}")
@@ -124,7 +130,7 @@ def frequency_distribution(tokens):
     # Return the frequency distribution as a dictionary
     return dict(freq_dist)
 
-def find_ngrams(tokens, n=2):
+def find_ngrams(tokens, n=2):  # Change n for bigrams (2), trigrams (3), etc.
     """
     Find n-grams in a list of tokens.
     """
@@ -167,8 +173,8 @@ try:
     logger.info("Fetched comments for analysis.")
     logger.info("Analyzing Comments This Will Take Some time.")
 
-    for author, comment_id, body in comments:
-        logger.info("Performing sentiment analysis")
+    for author, comment_id, body in tqdm(comments, desc="Analyzing Comments"):
+        logger.debug("Performing sentiment analysis")
         # Perform sentiment analysis
         sentiment_score = SIA.polarity_scores(body)['compound']
         logger.info("Sentiment analysis complete")
@@ -199,8 +205,10 @@ try:
     logger.info("Comment analysis completed.")
 except Exception as e:
     logger.exception(f"An error occurred: {e}")
-
 def process_comment(author, comment_id, body, duplicates, sheet, SIA):
+    """
+    Process and analyze a single comment.
+    """
     is_duplicate = 'Yes' if body.strip().lower() in duplicates else 'No'
     sentiment_score = SIA.polarity_scores(body)['compound']
     sentiment_label = "Positive" if sentiment_score >= 0.05 else "Negative" if sentiment_score <= -0.05 else "Neutral"
@@ -215,44 +223,49 @@ def process_comment(author, comment_id, body, duplicates, sheet, SIA):
     common_bigrams = ', '.join([' '.join(pair) for pair in bigram_list[:5]])
     sheet.append([author, comment_id, f"{body[:100]}...", sentiment_cell_value, entities, common_bigrams, diversity_cell_value, is_duplicate])
 
-try:
-    logger.info("Connecting to the database.")
-    conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host)
-    cur = conn.cursor()
-    logger.info("Connected to the database successfully.")
+def analyze_comments():
+    """
+    Main function to analyze comments.
+    """
+    try:
+        logger.info("Connecting to the database.")
+        conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host)
+        cur = conn.cursor()
+        logger.info("Connected to the database successfully.")
 
-    # Find duplicates before processing comments
-    duplicates = find_duplicate_comments(comments)
+        # Fetch comments for analysis
+        cur.execute("SELECT author, id, body, score, submission_id FROM comments")
+        comments = cur.fetchall()
+        logger.info("Fetched comments for analysis.")
 
-    # Specify the Excel file path and save the workbook
-    EXCEL_FILE_PATH = 'analysis_results/comment_analysis.xlsx'
-    workbook = Workbook()
-    sheet = workbook.active
-    if sheet is None:
-        sheet = workbook.create_sheet(title="Comment Data Analysis")
-    else:
-        sheet.title = "User Data Analysis"
+        # Find duplicates before processing comments
+        duplicates = find_duplicate_comments(comments)
 
-    # Explicitly cast sheet to Worksheet to satisfy the type checker
-    assert isinstance(sheet, Worksheet), "Active sheet is not a Worksheet instance"
-    sheet.append(["Author", "Comment ID", "Comment Body", "Sentiment Score", "Named Entities", "Common Bigrams", "Lexical Diversity", "Duplicate"])
+        # Specify the Excel file path and save the workbook
+        EXCEL_FILE_PATH = 'analysis_results/comment_analysis.xlsx'
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Comment Data Analysis"
+        sheet.append(["Author", "Comment ID", "Comment Body", "Sentiment Score", "Named Entities", "Common Bigrams", "Lexical Diversity", "Duplicate"])
 
-    for author, comment_id, body in comments:
-        process_comment(author, comment_id, body, duplicates, sheet, SIA)
+        for author, comment_id, body, score, submission_id in tqdm(comments, desc="Processing Comments"):
+            process_comment(author, comment_id, body, duplicates, sheet, SIA)
 
-    # Save the workbook
-    workbook.save(EXCEL_FILE_PATH)
-    logger.info(f"NLTK analysis results saved to {EXCEL_FILE_PATH}")
+        # Save the workbook
+        workbook.save(EXCEL_FILE_PATH)
+        logger.info(f"NLTK analysis results saved to {EXCEL_FILE_PATH}")
 
-    # Commit changes to the database
-    conn.commit()
-    logger.info("Comment analysis completed.")
+        conn.commit()
+        logger.info("Comment analysis completed.")
 
-except Exception as e:
-    logger.exception(f"An error occurred: {e}")
-finally:
-    if conn:
-        conn.close()
-        logger.info("Database connection closed.")
+    except Exception as e:
+        logger.exception(f"An error occurred: {e}")
 
-logger.info("All Operations Complete")
+    finally:
+        if conn:
+            conn.close()
+            logger.info("Database connection closed.")
+
+logger.info("Starting comment analysis...")
+analyze_comments()
+logger.info("Comment analysis complete.")

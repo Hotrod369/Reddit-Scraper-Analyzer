@@ -4,7 +4,7 @@
 
 The **Reddit Scraper & Analyzer** is an advanced tool designed to navigate through the complexities of Reddit's vast data landscape, extracting and processing data to uncover insightful patterns and behaviors. It is particularly adept at identifying anomalous activities indicative of bots, trolls, or other potentially malicious entities.
 
-Utilizing the **Python Reddit API Wrapper (PRAW)** for robust data extraction, the tool gathers comprehensive information from specified subreddits, including posts, comments, and user metrics. This data then undergoes detailed analysis, leveraging the **Natural Language Toolkit (NLTK)** for sophisticated text processing and sentiment analysis. This analysis assesses various parameters such as karma scores, account ages, and activity patterns to detect irregularities and understand the sentiment behind user comments.
+It operates in <u>read-only</u> mode using the **Python Reddit API Wrapper (PRAW)** for robust data extraction, the tool gathers comprehensive information from specified subreddit's, including posts, comments, and user metrics. This data then undergoes detailed analysis, leveraging the **Natural Language Toolkit (NLTK)** for sophisticated text processing and sentiment analysis. This analysis assesses various parameters such as karma scores, account ages, and activity patterns to detect irregularities and understand the sentiment behind user comments.
 
 Additionally, the system integrates **PostgreSQL**, a powerful open-source relational database, to manage and store large volumes of data efficiently. This allows for advanced querying capabilities and secure storage of the scraped data, facilitating complex data analysis tasks.
 
@@ -14,7 +14,7 @@ Serving as a critical resource for digital researchers, social media analysts, a
 
 ## Features
 
-**Data Scraping:** Utilize the scraper.py module to collect posts, comments, and user information from specified subreddits.
+**Data Scraping:** Utilize the `scraper.py` module, operating in read-only mode, to collect posts, comments, and user information from specified subreddit's.
 
 **JSON File Generation:** The scraper will output two JSON files containing user data (user_data.json) and submission data (submission_data.json). Here are examples of the expected JSON structures:
 
@@ -42,7 +42,7 @@ submission_data.json:
 
 **Data Extraction:** Extract user and submission data including usernames, karma, account creation dates, post titles, scores, etc.
 
-**Analysis:** Analyze user behavior, account characteristics, and other attributes to identify potential bots or trolls.
+**Analysis:** Analyze user behavior, account characteristics, and other attributes to identify potential bots or trolls. The analysis process now includes progress bars to provide real-time feedback on the progress of scraping and data processing tasks, ensuring transparency and user awareness.
 
 **Reporting:** Generate reports summarizing the findings of the analysis, including statistics, insights, and visualizations.
 
@@ -143,9 +143,7 @@ First, configure your config.json file in tools/config directory with your Reddi
     "subreddit": "xxxxxxxxxxxxxxxx",
     "client_id": "xxxxxxxxxxxxxxxxx",
     "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "username": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "password": "xxxxxxxxxxxxxxxxxxxxxxxx",
-    "user_agent": "Reddit Scraper (by u/Allan_QuartermainSr)",
+    "user_agent": "Reddit Scraper (by u/StinkyPete312)",
 	"post_sort": {
 		"method": "new",
 		"limit": 100
@@ -163,7 +161,7 @@ First, configure your config.json file in tools/config directory with your Reddi
 }
 ```
 
-**subreddit:** Specify the subreddit from which you want to scrape data. Multiple subreddits can be scraped by separating with a `+` like this `"subreddit1+subreddit2+subreddit3"`
+**subreddit:** Specify the subreddit from which you want to scrape data. Multiple subreddit's can be scraped by separating with a `+` like this `"subreddit1+subreddit2+subreddit3"`
 
 **client_id & client_secret:** Your Reddit application's credentials.
 

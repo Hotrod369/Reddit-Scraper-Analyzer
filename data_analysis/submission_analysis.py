@@ -1,5 +1,8 @@
 import json
+import os
+import nltk
 import psycopg2
+from tqdm import tqdm
 from nltk.sentiment import SentimentIntensityAnalyzer
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -10,17 +13,26 @@ logger = logging.getLogger(__name__)
 logger.info("Submission Analysis Basic logging set")
 init_logger()
 
-def download_nltk_data():
+def load_nltk_data():
     """
-    Downloads NLTK data resources such as 'vader_lexicon', 'punkt',
-    'averaged_perceptron_tagger', 'maxent_ne_chunker', 'words' for NLP tasks.
+    Downloads the required NLTK resources only when
+    necessary data is not already downloaded.
     """
-    import nltk
-    nltk_resources = ['vader_lexicon', 'punkt',
-                    'averaged_perceptron_tagger', 'maxent_ne_chunker', 'words']
-    for resource in nltk_resources:
-        nltk.download(resource)
-    logger.info("NLTK resources downloaded.")
+    nltk_data_path = './nltk_data'  # Define your local path for NLTK data
+    if not os.path.exists(nltk_data_path):
+        os.makedirs(nltk_data_path)
+
+    # Ensure NLTK knows where to find the local data
+    nltk.data.path.append(nltk_data_path)
+
+    # Load specific resources manually if they are not already downloaded
+    if not os.path.exists(os.path.join(nltk_data_path, 'vader_lexicon')):
+        nltk.download('vader_lexicon', download_dir=nltk_data_path)
+
+    if not os.path.exists(os.path.join(nltk_data_path, 'tokenizers/punkt')):
+        nltk.download('punkt', download_dir=nltk_data_path)
+
+load_nltk_data()
 
 def load_config():
     """
@@ -121,11 +133,11 @@ def submission_analysis():
     The `submission_analysis` function orchestrates the submission data analysis process.
     """
     logger = init_logger()
-    download_nltk_data()
+    load_nltk_data()
     config = load_config()
     if conn := connect_to_database(config):
-        submissions = fetch_data(conn)
-        analyzed_data = analyze_data(submissions)
+        submissions = tqdm(fetch_data(conn), desc="Fetching submissions")
+        analyzed_data = tqdm(analyze_data(submissions), desc="Analyzing data")
         write_to_excel(analyzed_data, 'analysis_results/submission_analysis.xlsx')
         conn.close()
         logger.info("Database connection closed.")
