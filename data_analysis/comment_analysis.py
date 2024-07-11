@@ -93,6 +93,7 @@ def find_duplicate_comments(comments):
     """
     logger.info("Finding duplicate comments")
     # Using a dictionary to count occurrences of each comment body
+
     comment_count = {}
     for comment in tqdm(comments, desc="Finding Duplicate Comments"):
         body = comment[2]  # Assuming the body is the third element in the tuple
@@ -269,3 +270,45 @@ def analyze_comments():
 logger.info("Starting comment analysis...")
 analyze_comments()
 logger.info("Comment analysis complete.")
+
+try:
+    logger.info("Connecting to the database.")
+    conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host)
+    cur = conn.cursor()
+    logger.info("Connected to the database successfully.")
+
+    # Find duplicates before processing comments
+    duplicates = find_duplicate_comments(comments)
+
+    # Specify the Excel file path and save the workbook
+    EXCEL_FILE_PATH = 'analysis_results/comment_analysis.xlsx'
+    workbook = Workbook()
+    sheet = workbook.active
+    if sheet is None:
+        sheet = workbook.create_sheet(title="Comment Data Analysis")
+    else:
+        sheet.title = "User Data Analysis"
+
+    # Explicitly cast sheet to Worksheet to satisfy the type checker
+    assert isinstance(sheet, Worksheet), "Active sheet is not a Worksheet instance"
+    sheet.append(["Author", "Comment ID", "Comment Body", "Sentiment Score", "Named Entities", "Common Bigrams", "Lexical Diversity", "Duplicate"])
+
+    for author, comment_id, body in comments:
+        process_comment(author, comment_id, body, duplicates, sheet, SIA)
+
+    # Save the workbook
+    workbook.save(EXCEL_FILE_PATH)
+    logger.info(f"NLTK analysis results saved to {EXCEL_FILE_PATH}")
+
+    # Commit changes to the database
+    conn.commit()
+    logger.info("Comment analysis completed.")
+
+except Exception as e:
+    logger.exception(f"An error occurred: {e}")
+finally:
+    if conn:
+        conn.close()
+        logger.info("Database connection closed.")
+
+logger.info("All Operations Complete")
