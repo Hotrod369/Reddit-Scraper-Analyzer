@@ -19,6 +19,8 @@ debug.log
 app.log
 reddit_moderator_helper.egg-info
 analysis_results/
+model.pkl
+sklearn-env
 nltk_data/
 graph_outputs
 project_graph_creator.py

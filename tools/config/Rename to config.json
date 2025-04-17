@@ -1,0 +1,36 @@
+{
+    "database": {
+		"dbname": "reddit_analysis",
+		"user": "postgres",
+		"password": "xxxxxxxxxxx",
+		"host": "localhost"
+	},
+    "subreddit": "xxxxxxxxxxxxxxxx",
+    "client_id": "xxxxxxxxxxxxxxxxx",
+    "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "username": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "password": "xxxxxxxxxxxxxxxxxxxxxxxx",
+	"user_agent": "Reddit Scraper & Analyzer (by u/StinkyPete312)",
+	"max_concurrent_requests": 4,
+	"submission_sort": {
+		"method": "new",
+        "limit": 25
+	},
+	"comments_limit": 250,
+	"submissions_limit": 250,
+	"karma_threshold": 500,
+	"account_age_threshold": 0.5,
+	"inactivity_period": 3,
+	"burst_period": 1,
+	"notes": [
+        "Configure how submissions are fetched: ‘method’ controls sorting (`new`, `hot`, etc.) and `limit` balances depth vs speed (e.g., lower limits for quick scans, higher for thorough research).",
+        
+        "Fine-tune `comments_limit` and `submissions_limit` here to adjust the number of comments/submissions per post or user—lower values shorten runtime, higher values yield richer context.",
+        
+        "Use `karma_threshold` and `account_age_threshold` to flag potentially suspicious accounts: lower values catch new or low-engagement users, higher values focus on matured profiles.",
+        
+        "Adjust `inactivity_period` and `burst_period` to detect bursty activity patterns—short gaps highlight rapid reposting, longer gaps reduce false positives from normal behavior cycles.",
+        
+        "Use `max_concurrent_requests` to control how many API calls run in parallel—lower values help avoid rate‑limit errors, higher values speed up scraping on faster connections."
+	]
+}

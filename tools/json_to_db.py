@@ -5,7 +5,7 @@ from tools.config.config_loader import CONFIG
 from tools.config.logger_config import init_logger, logging
 
 logger = logging.getLogger(__name__)
-logger.info("json to db Basic logging set")
+logger.info("json_to_db Basic logging set")
 init_logger()
 
 def load_json_data(file_path):
@@ -34,7 +34,7 @@ async def insert_redditors(conn, redditor_data):
         redditor_data (dict): A dictionary containing redditor data.
 
     Returns:
-        set: A set containing the successfully inserted redditors.
+        set: A set containing the successfully inserted redditor_ids.
     """
     inserted_redditors = set()
     redditor_records = []
@@ -46,7 +46,7 @@ async def insert_redditors(conn, redditor_data):
             logger.warning(f"Skipping redditor {redditor} due to missing redditor_id.")
             continue
         
-        # Build the tuple of 14 values
+        # Build the tuple of 13 values
         redditor_records.append((
             redditor_id,
             details.get('redditorname'),
@@ -106,6 +106,7 @@ async def insert_submissions(conn, redditor_data, submission_data):
     Inserts submissions into the submissions table.
     """
     logger.info("Inserting submissions")
+    # 1. Check if redditor exists in redditor_data
     for submission_id, submission in submission_data.items():
         if submission.get("author") not in redditor_data:
             logger.warning(f"redditor {submission.get('author')} not found in redditor data, skipping submission: {submission_id}")

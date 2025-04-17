@@ -1,45 +1,52 @@
 '''
 This file handles the Reddit login and configuration options
 '''
-import json
 import praw
-import praw.exceptions
-from tools.config.logger_config import init_logger
 import logging
+import json
+from tools.config.logger_config import init_logger
 
+# Initialize logging
 logger = logging.getLogger(__name__)
 logger.info("Basic logging set")
 init_logger()
 
-
 def load_config():
     """
-    Loads the configuration from a JSON file and returns it as a dictionary.
+    Load the configuration from the config file.
     """
-    config_path = 'tools/config/config.json'
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open('tools/config/config.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
-            logger.debug("Config loaded successfully")
-            return config  # Ensure this is inside the try block to return the loaded config
-    except FileNotFoundError:
-        logger.error(f"Configuration file {config_path} not found.")
-        raise
-    except json.JSONDecodeError:
-        logger.error(f"Error decoding JSON from the configuration file {config_path}.")
-        raise
-logger.info("Config loaded successfully")
+        logger.info("Config loaded successfully")
+        return config
+    except FileNotFoundError as e:
+        logger.error(f"Config file not found: {e}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding config file: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error loading config: {e}")
+    return None
 
-def login(config):  # sourcery skip: inline-immediately-returned-variable
+def login(config):
     """
-    The `login` function logs into Reddit using the provided configuration parameters.
+    Log in to Reddit using PRAW in read-only mode.
     """
-    reddit = praw.Reddit(
-        user_agent=config['user_agent'],
-        client_id=config['client_id'],
-        client_secret=config['client_secret'],
-        password=config['password'],
-        username=config['username']
-    )
-    logger.info(f"Logged in as {reddit.user.me()}")
-    return reddit
+    try:
+        reddit = praw.Reddit(
+            client_id=config['client_id'],
+            client_secret=config['client_secret'],
+            user_agent=config['user_agent']
+        )
+        logger.info(f"Logged in as read-only: {reddit.read_only}")
+        return reddit
+    except KeyError as e:
+        logger.error(f"Missing key in config file: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error during login: {e}")
+    return None
+
+if __name__ == "__main__":
+    if config := load_config():
+        if reddit := login(config):
+            print(f"Logged in as read-only: {reddit.read_only}")

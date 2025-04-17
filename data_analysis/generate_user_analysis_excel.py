@@ -49,6 +49,9 @@ async def generate_user_analysis_excel():
 
         # 3. Analyze user data (synchronous function)
         analyzed_users = analyze_users(CONFIG, users)
+        if analyzed_users is None:
+            logger.error("User analysis returned None, please check the analyze_users function.")
+            return
         logger.info(f"Analyzed {len(analyzed_users)} users.")
 
         # 4. Create the Excel workbook and worksheet
