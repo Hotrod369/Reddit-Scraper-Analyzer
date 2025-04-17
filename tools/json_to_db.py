@@ -1,227 +1,267 @@
-import datetime
+import asyncio
 import json
-import os
-import psycopg2
-from tools.config.reddit_login import load_config
-from tools.config.logger_config import init_logger
-import logging
-
+import asyncpg
+from tools.config.config_loader import CONFIG
+from tools.config.logger_config import init_logger, logging
 
 logger = logging.getLogger(__name__)
 logger.info("json to db Basic logging set")
 init_logger()
 
+def load_json_data(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
-# Function to insert users into the database
-def insert_users(cur, user_data):
+# Load data from redditor_data.json
+redditor_data_path = 'analysis_results/redditor_data.json'
+redditor_data = load_json_data(redditor_data_path)
+
+# Load data from submission_data.json
+submission_data_path = 'analysis_results/submission_data.json'
+submission_data = load_json_data(submission_data_path)
+
+# Asynchronous function to insert redditors into the database
+async def insert_redditors(conn, redditor_data):
     """
-    Inserts users into the users table.
+    Inserts or updates redditor data into the database.
+
+    This function iterates through the provided redditor data and inserts or updates
+    corresponding records in the 'users' table. It handles potential
+    UniqueViolationErrors during insertion.
+    
+    Args:
+        conn: An asyncpg connection object.
+        redditor_data (dict): A dictionary containing redditor data.
+
+    Returns:
+        set: A set containing the successfully inserted redditors.
     """
-    logger.info("Starting to insert users")
-    inserted_usernames = set()
-    for username, details in user_data.items():
-        logger.debug(f"Inserting user: {username}")
-        cur.execute("BEGIN")  # Start a transaction to ensure atomicity
+    inserted_redditors = set()
+    redditor_records = []
+
+    # 1. Collect all redditor records
+    for redditor, details in redditor_data.items():
+        redditor_id = details.get('redditor_id')
+        if not redditor_id:
+            logger.warning(f"Skipping redditor {redditor} due to missing redditor_id.")
+            continue
+        
+        # Build the tuple of 14 values
+        redditor_records.append((
+            redditor_id,
+            details.get('redditorname'),
+            details.get('created_utc'),
+            details.get('link_karma'),
+            details.get('comment_karma'),
+            details.get('total_karma'),
+            details.get('is_employee'),
+            details.get('is_mod'),
+            details.get('is_gold'),
+            details.get('dormant_days'),
+            details.get('has_verified_email'),
+            details.get('accept_followers'),
+            details.get('redditor_is_subscriber'),
+        ))
+        
+        # Track this redditor in our set
+        inserted_redditors.add(redditor)
+
+    # 2. Perform one batch insertion if we have records
+    if redditor_records:
+        logger.info(f"Batch inserting {len(redditor_records)} redditors into 'users' table.")
         try:
-            cur.execute("""
-                INSERT INTO users (username, karma, awardee_karma, awarder_karma,
-                total_karma, has_verified_email, link_karma, comment_karma,
-                accepts_followers, created_utc, dormant_days)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (username) DO UPDATE SET
-                karma = EXCLUDED.karma,
-                awardee_karma = EXCLUDED.awardee_karma,
-                awarder_karma = EXCLUDED.awarder_karma,
-                total_karma = EXCLUDED.total_karma,
-                has_verified_email = EXCLUDED.has_verified_email,
-                link_karma = EXCLUDED.link_karma,
-                comment_karma = EXCLUDED.comment_karma,
-                accepts_followers = EXCLUDED.accepts_followers,
-                created_utc = EXCLUDED.created_utc,
-                dormant_days = EXCLUDED.dormant_days;
-                """, (
-                    username, details.get('Karma'), details.get('awardee_karma'),
-                    details.get('awarder_karma'), details.get('total_karma'),
-                    details.get('has_verified_email'), details.get('link_karma'),
-                    details.get('comment_karma'), details.get('accept_followers'),
-                    details.get('created_utc'), details.get('dormant_days'),
+            await conn.executemany(
+                """
+                INSERT INTO users (
+                    redditor_id, redditor, created_utc, link_karma, comment_karma, total_karma,
+                    is_employee, is_mod, is_gold, dormant_days, has_verified_email,
+                    accepts_followers, redditor_is_subscriber
                 )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (redditor_id) DO UPDATE SET
+                    redditor = EXCLUDED.redditor,
+                    created_utc = EXCLUDED.created_utc,
+                    link_karma = EXCLUDED.link_karma,
+                    comment_karma = EXCLUDED.comment_karma,
+                    total_karma = EXCLUDED.total_karma,
+                    is_employee = EXCLUDED.is_employee,
+                    is_mod = EXCLUDED.is_mod,
+                    is_gold = EXCLUDED.is_gold,
+                    dormant_days = EXCLUDED.dormant_days,
+                    has_verified_email = EXCLUDED.has_verified_email,
+                    accepts_followers = EXCLUDED.accepts_followers,
+                    redditor_is_subscriber = EXCLUDED.redditor_is_subscriber;
+                """,
+                redditor_records
             )
-            inserted_usernames.add(username)
-            logger.debug(f"Successfully inserted/updated user: {username}")
-        except Exception as e:
-            logger.error(f"Error inserting user {username}: {e}")
-        conn.commit()
-    return inserted_usernames
+        except asyncpg.exceptions.UniqueViolationError as e:
+            logger.error(f"Error in batch insertion: {e}")
+    else:
+        logger.warning("No valid redditor records found. Skipping insertion.")
 
-def extract_comment_authors(submission_data):
-    """
-    Extracts comment authors from the submission data and returns a dict
-    """
-    try:
-        comment_authors = {}
-        for submission_id, submission in submission_data.items():
-            logger.info("Extracting comment authors from submissions")
-            # Extract the comment authors from the submission data, and add them to
-            # the comment_authors dict if they don't exist yet
-            comments = submission.get('comments', [])
-            for comment in comments:
-                author = comment['author']
-                if author not in comment_authors:
-                    comment_authors[author] = {
-                        'Karma': None,  # You might need logic to determine actual values
-                        'awardee_karma': 0,
-                        'awarder_karma': 0,
-                        'total_karma': 0,
-                        'has_verified_email': False,
-                        'link_karma': 0,
-                        'comment_karma': 0,
-                        'accept_followers': False,
-                        'created_utc': datetime.datetime.now().timestamp()  # Placeholder
-                    }
-                    logger.debug(f"Added author {author} to comment_authors")
-    except Exception as e:
-        logger.error(f"Error extracting comment authors: {e}")
-        return comment_authors
+    return inserted_redditors
 
-
-
-def insert_submissions(cur, user_data, submission_data):
+async def insert_submissions(conn, redditor_data, submission_data):
     """
     Inserts submissions into the submissions table.
-    This function assumes that the user_data and submission_data dicts have been
     """
     logger.info("Inserting submissions")
     for submission_id, submission in submission_data.items():
-        cur.execute("BEGIN")
-        if submission.get("User") not in user_data:
-            logger.warning(f"User {submission.get('User')} not found in user data,\
-                            skipping submission: {submission_id}")
-            cur.execute("ROLLBACK")  # Rollback to end the transaction cleanly
+        if submission.get("author") not in redditor_data:
+            logger.warning(f"redditor {submission.get('author')} not found in redditor data, skipping submission: {submission_id}")
             continue
-        # Insert the submission into the submissions table, or update if it already exists
         try:
-            cur.execute("""
-                INSERT INTO submissions (id, user_username, title, score, url, created_utc)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO UPDATE SET
-                title = EXCLUDED.title,
-                score = EXCLUDED.score,
-                url = EXCLUDED.url,
-                created_utc = EXCLUDED.created_utc;
-                """, (
-                    submission_id, submission.get("User"), submission.get("title"),
-                    submission.get("score"), submission.get("url"), submission.get("created_utc")
+            await conn.executemany(
+                """
+                INSERT INTO submissions (
+                    submission_id,
+                    author,
+                    title,
+                    submission_score,
+                    url,
+                    submission_created_utc,
+                    over_18
                 )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (submission_id) DO UPDATE SET
+                    author = EXCLUDED.author,
+                    title = EXCLUDED.title,
+                    submission_score = EXCLUDED.submission_score,
+                    url = EXCLUDED.url,
+                    submission_created_utc = EXCLUDED.submission_created_utc,
+                    over_18 = EXCLUDED.over_18;
+                """,
+                [
+                    (
+                        submission_id,
+                        submission.get("author"),
+                        submission.get("title"),
+                        submission.get("submission_score"),
+                        submission.get("url"),
+                        submission.get("submission_created_utc"),
+                        submission.get("over_18")
+                    )
+                    for submission_id, submission in submission_data.items()
+                ]
             )
-            logger.debug(f"Successfully inserted/updated submission: {submission_id}")
-        except Exception as e:
+        except asyncpg.exceptions.UniqueViolationError as e:
             logger.error(f"Error inserting submission {submission_id}: {e}")
-        conn.commit()
-        logger.debug("Committing transaction")
+            await conn.rollback()  # Rollback for this error and continue
     logger.info("Finished inserting submissions")
 
-def insert_comments(cur, submission_data, inserted_usernames):
+async def insert_comments(conn, submission_data, inserted_redditors):
     """
     Inserts comments into the comments table.
-    This function assumes that the submission_data dict has been populated with
     """
     logger.info("Inserting comments")
-    for id, submission in submission_data.items():
+    for submission_id, submission in submission_data.items():
         comments = submission.get('comments', [])
         if not comments:
-            logger.warning(f"No comments found for submission {submission['id']}, skipping")
             continue
 
         for comment in comments:
-            author = comment['author']
-            if author not in inserted_usernames:
-                logger.warning(f"Author {author} not found in inserted users,\
-                                skipping comment {comment['id']}")
+            comment_author = comment['comment_author']
+            comment_id = comment['comment_id']
+            if comment_author not in inserted_redditors:
+                logger.warning(f"Author {comment_author} not found in inserted redditors, skipping comment {comment_id}")
                 continue
             try:
-                logger.debug(f"Checking for existing comment: {comment['id']}")
-                cur.execute("SELECT id FROM comments WHERE id = %s", (comment['id'],))
-                if cur.fetchone():
-                    logger.warning(f"Comment {comment['id']} already exists, skipping insert")
+                logger.debug(f"Checking for existing comment: {comment_id}")
+                existing_comment = await conn.fetchrow("SELECT comment_id FROM comments WHERE comment_id = $1", comment_id)
+                if existing_comment:
+                    logger.warning(f"Comment {comment_id} already exists, skipping insert")
                     continue
 
-                logger.info("Inserting comments")
-                cur.execute(
+                logger.info("Inserting comment")
+                await conn.executemany(
                     """
-                    INSERT INTO comments (id, author, body, score, submission_id)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (id) DO UPDATE SET
-                    author = EXCLUDED.author,
-                    body = EXCLUDED.body,
-                    score = EXCLUDED.score,
-                    submission_id = EXCLUDED.submission_id;
+                    INSERT INTO comments (
+                        comment_id,
+                        comment_author,
+                        comment_created_utc,
+                        body,
+                        comment_score,
+                        is_submitter,
+                        edited,
+                        link_id
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (comment_id) DO UPDATE SET
+                        comment_author = EXCLUDED.comment_author,
+                        comment_created_utc = EXCLUDED.comment_created_utc,
+                        body = EXCLUDED.body,
+                        comment_score = EXCLUDED.comment_score,
+                        is_submitter = EXCLUDED.is_submitter,
+                        edited = EXCLUDED.edited,
+                        link_id = EXCLUDED.link_id;
                     """,
-                    (comment['id'], author, comment['body'], comment['score'], submission['id'])
+                    [
+                        (
+                            comment['comment_id'],
+                            comment['comment_author'],
+                            comment['comment_created_utc'],
+                            comment['body'],
+                            comment['comment_score'],
+                            comment['is_submitter'],
+                            bool(comment['edited']),  # Ensure edited is a boolean
+                            comment['link_id'],
+                        )
+                        for comment in comments
+                    ]
                 )
-            except psycopg2.IntegrityError as e:
-                logger.error(f"Error inserting comment {comment['id']}: {e}")
-                conn.rollback()
-            else:
-                conn.commit()
+            except asyncpg.exceptions.DataError as e:
+                logger.error(f"Error inserting comment {comment_id}: {e}")
+                await conn.rollback()  # Rollback for this error and continue
     logger.info("Finished inserting comments")
 
-
-
-def main():
+async def _process_and_insert_data(conn):
     """
-    Executes the process of extracting data from JSON
-    files and inserting it into a PostgreSQL database.
+    Processes the JSON files and inserts the data into the database.
     """
+    logger.info("Processing JSON files for data insertion")
+    with open('analysis_results/redditor_data.json', 'r', encoding='utf-8') as file:
+        redditor_data = json.load(file)
+        logger.debug("Extracted redditor data from redditor_data.json")
+
+    with open('analysis_results/submission_data.json', 'r', encoding='utf-8') as file:
+        submission_data = json.load(file)
+        logger.debug("Extracted submission data from submission_data.json")
+
+    logger.info("Calling insert_redditors() function...")
+    inserted_redditors = await insert_redditors(conn, redditor_data)
+    logger.info(f"Inserted redditors: {len(inserted_redditors)}")
+
+    await insert_submissions(conn, redditor_data, submission_data)
+    logger.info("Inserted submissions")
+
+    await insert_comments(conn, submission_data, inserted_redditors)
+    logger.info("Inserted comments")
+    logger.info(f"Total redditors found: {len(redditor_data)}")
+    logger.info(f"Total submissions found: {len(submission_data)}")
+
+async def main():
+    """
+    Executes the process of extracting data from JSON files and inserting it into a PostgreSQL database.
+    """
+    config = CONFIG['database']
+    # Map 'dbname' from the config to 'database' for asyncpg
+    conn = await asyncpg.connect(
+        user =config['user'],  # Map 'user' to 'redditor'
+        password=config['password'],
+        database=config['dbname'],  # Map 'dbname' to 'database'
+        host=config['host'],
+        port=config.get('port', 5432)  # Default to 5432 if port is not provided
+    )
     try:
-        # It's better to avoid global when possible,
-        #but ensure these are defined in the scope needed.
-        global conn, cur
-        config = load_config()
-        conn = psycopg2.connect(**config['database'])
-        cur = conn.cursor()
         logger.info("Loaded config and connected to database")
-
-        with open('analysis_results/user_data.json', 'r', encoding='utf-8') as file:
-            user_data = json.load(file)
-            logger.debug("Extracted user data from user_data.json:")
-
-        with open('analysis_results/submission_data.json', 'r', encoding='utf-8') as file:
-            submission_data = json.load(file)
-            logger.debug("Extracted submission data from submission_data.json:")
-
-        if comment_authors := extract_comment_authors(submission_data):
-            logger.debug(f"Extracted comment authors: {len(comment_authors)}")
-            user_data.update(comment_authors)
-        else:
-            logger.info("No additional comment authors found")
-
-        inserted_usernames = insert_users(cur, user_data)
-        logger.info("Inserted users")
-
-        # Move the call to extract_comment_authors after insert_users
-        if comment_authors := extract_comment_authors(submission_data):
-            logger.debug(f"Extracted comment authors: {len(comment_authors)}")
-            user_data.update(comment_authors)
-            inserted_usernames.update(comment_authors.keys())
-        else:
-            logger.info("No additional comment authors found")
-
-        insert_submissions(cur, user_data, submission_data)
-        logger.info("Inserted submissions")
-        insert_comments(cur, submission_data, inserted_usernames)
-        logger.info("Inserted comments")
-
+        await _process_and_insert_data(conn)
     except Exception as e:
-        raise e
-
-    cur.close()
-    conn.commit()
-    conn.close()
-    logger.info("Committed data and closing connection")
-
-
+        logger.exception(f"An error occurred in json_to_db.main: {e}")
+        raise
+    finally:
+        await conn.close()
+        logger.info("Committed data and closed connection")
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
     logger.info("Data insertion complete")

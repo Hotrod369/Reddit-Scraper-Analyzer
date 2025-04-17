@@ -1,146 +1,276 @@
-import json
-import os
-import nltk
-import psycopg2
+from tqdm import tqdm  # For progress display
+import asyncpg
+import asyncio
+import re
 from nltk.sentiment import SentimentIntensityAnalyzer
-from openpyxl import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
-from tools.config.logger_config import init_logger
-import logging
+from nltk import word_tokenize, pos_tag, ne_chunk, ngrams
+from tools.download_nltk_data import load_nltk_data
+from tools.config.config_loader import CONFIG
+from tools.config.logger_config import init_logger, logging
+
 
 logger = logging.getLogger(__name__)
-logger.info("Submission Analysis Basic logging set")
+logger.info("Submission Analysis Module Logging Set")
 init_logger()
-
-def load_nltk_data():
-    """
-    Downloads the required NLTK resources only when
-    necessary data is not already downloaded.
-    """
-    nltk_data_path = './nltk_data'  # Define your local path for NLTK data
-    if not os.path.exists(nltk_data_path):
-        os.makedirs(nltk_data_path)
-
-    # Ensure NLTK knows where to find the local data
-    nltk.data.path.append(nltk_data_path)
-
-    # Load specific resources manually if they are not already downloaded
-    if not os.path.exists(os.path.join(nltk_data_path, 'vader_lexicon')):
-        nltk.download('vader_lexicon', download_dir=nltk_data_path)
-
-    if not os.path.exists(os.path.join(nltk_data_path, 'tokenizers/punkt')):
-        nltk.download('punkt', download_dir=nltk_data_path)
-
 load_nltk_data()
 
-def load_config():
+# ------------------------------------------------
+# 1) CONNECT TO DATABASE (asyncpg)
+# ------------------------------------------------
+async def connect_to_database():
     """
-    The `load_config` function reads and loads a JSON configuration file located at
-    'tools/config/config.json'.
+    Establish an asyncpg connection using the config in CONFIG.
     """
-    with open('tools/config/config.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    logger.debug("Config loaded")
-    return config
-
-def connect_to_database(config):
-    """
-    The function `connect_to_database` establishes a connection to a PostgreSQL database using the
-    provided configuration.
-    """
-    db_config = config['database']
+    cfg = CONFIG["database"]
     try:
-        conn = psycopg2.connect(
-            dbname=db_config['dbname'],
-            user=db_config['user'],
-            password=db_config['password'],
-            host=db_config['host']
+        conn = await asyncpg.connect(
+            user=cfg["user"],
+            password=cfg["password"],
+            database=cfg["dbname"],
+            host=cfg["host"],
+            port=cfg.get("port", 5432),
         )
-        logger.info("Connected to the database successfully.")
+        logger.info("Async database connection successful.")
         return conn
-    except psycopg2.DatabaseError as e:
+    except Exception as e:
         logger.error(f"Database connection failed: {e}")
         return None
 
-def fetch_data(conn):
+
+# ------------------------------------------------
+# 2) FETCH SUBMISSIONS
+# ------------------------------------------------
+async def fetch_submissions(conn):
     """
-    The `fetch_data` function retrieves submissions data from a database using a cursor and logs
-    relevant information.
+    Retrieves submission data from the database using asyncpg.
+
+    Returns:
+        List of asyncpg.Record objects, each with columns:
+            - submission_id
+            - author
+            - title
+            - submission_score
+            - url
+            - submission_created_utc
+            - over_18
+    """
+    query = """
+        SELECT
+            submissions.submission_id,
+            submissions.author,
+            submissions.title,
+            submissions.submission_score,
+            submissions.url,
+            submissions.submission_created_utc,
+            submissions.over_18
+        FROM submissions
+        JOIN users
+        ON submissions.author = users.redditor
+        ORDER BY submissions.submission_id
     """
     try:
-        cur = conn.cursor()
-        cur.execute("SELECT id, user_username, title, score, url FROM submissions")
-        submissions = cur.fetchall()
-        logger.info("Fetched submissions for analysis.")
-        return submissions
-    except psycopg2.DatabaseError as e:
-        logger.error(f"Error fetching data from database: {e}")
-        logger.info("Fetched Submission Info")
+        rows = await conn.fetch(query)
+        logger.info(f"Fetched {len(rows)} submissions for analysis.")
+        return rows
+    except asyncpg.PostgresError as pg_err:
+        logger.error(f"A PostgreSQL error occurred: {pg_err}")
         return []
+    except Exception as e:
+        logger.exception(f"An error occurred in fetch_submissions: {e}")
+        return []
+
+# ------------------------------------------------
+# 3) UTILITY / ANALYSIS FUNCTIONS
+# ------------------------------------------------
+def analyze_submission_title(title: str) -> dict:
+    """
+    Perform NLTK-based analysis on a submission title.
+    Returns a dict with named_entities, lexical_diversity, and common_bigrams.
+    """
+    # Tokenize the title.
+    tokens = word_tokenize(title)
+    # POS-tag the tokens.
+    tagged_tokens = pos_tag(tokens)
+    # Run named entity recognition.
+    ner_tree = ne_chunk(tagged_tokens)
+    named_entities = ", ".join(
+        str(chunk) for chunk in ner_tree if hasattr(chunk, "label")
+    )
+
+    # Lexical diversity
+    lex_div = len(set(tokens)) / len(tokens) if tokens else 0.0
+    # Extract bigrams
+    bigrams_list = list(ngrams(tokens, 2))
+    common_bigrams = ", ".join([" ".join(b) for b in bigrams_list[:5]])
+
+    return {
+        "named_entities": named_entities,
+        "lexical_diversity": lex_div,
+        "common_bigrams": common_bigrams,
+    }
+
+
+def lex_div(text: str) -> tuple[float, str]:
+    """
+    Calculates lexical diversity of a text and returns (diversity_score, label).
+    """
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    tokens = word_tokenize(text)
+    if not tokens:
+        return 0.0, "No text"
+
+    diversity_score = len(set(tokens)) / len(tokens)
+    if diversity_score > 0.7:
+        diversity_label = "Highly diverse"
+    elif diversity_score > 0.4:
+        diversity_label = "Moderately diverse"
+    else:
+        diversity_label = "Less diverse"
+
+    return diversity_score, diversity_label
+
+def mark_duplicate_submissions(analysis_results):
+    """
+    Given a list of submission dicts (each with at least
+    'Author', 'Title', 'URL'), find duplicates posted by the same user
+    with the same title and same link.
+
+    Returns a modified copy of analysis_results, where each dict
+    has a new key "Is Duplicate" (bool).
+    """
+    from collections import defaultdict
+
+    # 1) Group submissions by (Author, Title, URL)
+    #    Normalizing them is optional but recommended (e.g. .lower(), strip()).
+    groups = defaultdict(list)
+    for idx, sub in enumerate(analysis_results):
+        author = sub["Author"].strip().lower()
+        title = sub["Title"].strip().lower()
+        url = sub["URL"].strip().lower()
+        key = (author, (title, url))
+        groups[key].append(idx)
+
+    # 2) Mark duplicates
+    #    If a group has more than 1 submission, all of them are duplicates.
+    for indices in groups.values():
+        if len(indices) > 1:
+            # We have duplicates
+            for i in indices:
+                analysis_results[i]["Is Duplicate"] = True
+        else:
+            # Only 1 submission in that group => not a duplicate
+            analysis_results[indices[0]]["Is Duplicate"] = False
+
+    return analysis_results
 
 def analyze_data(submissions):
     """
-    The `analyze_data` function analyzes the sentiment of titles in submissions and adds a sentiment
-    label to the results.
+    Analyze a list of submissions.
+    Returns a list of dicts with:
+        - Submission ID
+        - Author
+        - Title
+        - Submission Score
+        - URL
+        - Created UTC
+        - Sentiment
+        - Named Entities
+        - Lexical Diversity
+        - Common Bigrams
+        - Is Duplicate
     """
     SIA = SentimentIntensityAnalyzer()
     results = []
-    for submission in submissions:
-        # The submission tuple is structured as (id, username, title, score, url)
-        submission_id, username, title, score, url = submission
-        sentiment_score = SIA.polarity_scores(title)['compound']
-        # Determine the sentiment label
+    
+    # Process each submission and build the analysis record
+    for submission in tqdm(submissions, desc="Analyzing Submissions", unit="submission"):
+        # submission is an asyncpg.Record or tuple
+        (submission_id, author, title, submission_score, url, submission_created_utc, over_18) = submission
+
+        # Sentiment analysis
+        sentiment_score = SIA.polarity_scores(title)["compound"]
         if sentiment_score >= 0.05:
             sentiment_label = "Positive"
         elif sentiment_score <= -0.05:
             sentiment_label = "Negative"
         else:
             sentiment_label = "Neutral"
-        # Combine the score and label
-        sentiment_cell_value = f"{sentiment_score} ({sentiment_label})"
-        results.append((submission_id, username, title, score, url, sentiment_cell_value))
-    logger.info("Data analysis completed.")
+        sentiment_cell_value = f"{sentiment_score:.3f} ({sentiment_label})"
+
+        # Additional NLTK-based analysis
+        title_analysis = analyze_submission_title(title)
+
+        # Build a record without the duplicate flag first
+        record = {
+            "Submission ID": submission_id,
+            "Author": author,
+            "Title": title,
+            "Score": submission_score,
+            "URL": url,
+            "Created UTC": submission_created_utc,
+            "NSFW": over_18,
+            "Sentiment": sentiment_cell_value,
+            "Named Entities": title_analysis["named_entities"],
+            "Lexical Diversity": title_analysis["lexical_diversity"],
+            "Common Bigrams": title_analysis["common_bigrams"],
+            # "Is Duplicate" will be set later
+        }
+        results.append(record)
+    
+    # Mark duplicates on the entire results list
+    results = mark_duplicate_submissions(results)
+    logger.info("Submission data analysis completed.")
     return results
 
-def write_to_excel(analyzed_data, file_path):
+# --------------------------------
+# 4) MAIN SUBMISSION ANALYSIS FLOW
+# --------------------------------
+async def submission_analysis():
     """
-    The function `write_to_excel` writes analyzed data to an Excel file with specified headers and saves
-    it to the provided file path.
+    Orchestrates the submission data analysis process.
+    1) Connect to DB
+    2) Fetch submissions
+    3) Analyze
+    4) Optionally: store or return results
     """
-    workbook = Workbook()
-    sheet = workbook.active
-    if sheet is None:
-        sheet = workbook.create_sheet(title="Submission Data Analysis")
-    else:
-        sheet.title = "Submission Data Analysis"
+    logger.info("Starting submission analysis")
 
-    # Explicitly cast sheet to Worksheet to satisfy the type checker
-    assert isinstance(sheet, Worksheet), "Active sheet is not a Worksheet instance"
-    headers = ["Submission ID", "Username", "Title", "Score",  "URL", "Sentiment Score"]
-    sheet.append(headers)
+    # 1) Connect to DB
+    conn = await connect_to_database()
+    if conn is None:
+        logger.error("Could not connect to the database.")
+        return
 
-    # Analyzed_data is a list of tuples/lists
-    # e.g., [(id1, username1, title1, score1, url1, sentiment1), ...]
-    for data in analyzed_data:
-        sheet.append(data)
+    try:
+        # 2) Fetch submissions
+        submissions = await fetch_submissions(conn)
+        if not submissions:
+            logger.warning("No submissions found to analyze.")
+            return
 
-    workbook.save(file_path)
-    logger.info(f"Analysis results saved to {file_path}")
+        # 3) Analyze
+        analysis_results = analyze_data(submissions)
+        logger.info("Analyzing submissions completed.")
 
-def submission_analysis():
-    """
-    The `submission_analysis` function orchestrates the submission data analysis process.
-    """
-    logger = init_logger()
-    load_nltk_data()
-    config = load_config()
-    if conn := connect_to_database(config):
-        submissions = fetch_data(conn)
-        analyzed_data = analyze_data(submissions)
-        write_to_excel(analyzed_data, 'analysis_results/submission_analysis.xlsx')
-        conn.close()
-        logger.info("Database connection closed.")
+        # 3a) Mark duplicates
+        analysis_results = mark_duplicate_submissions(analysis_results)
+
+        # 4) Optionally: store or return results
+        logger.debug(analysis_results)
+
+    except asyncpg.PostgresError as e:
+        logger.error(f"Error during submission analysis (asyncpg): {e}")
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred during submission_analysis: {e}")
+    finally:
+        # 5) Clean up
+        await conn.close()
+        logger.info("Submission analysis completed, connection closed.")
+
 
 if __name__ == "__main__":
-    submission_analysis()
+    asyncio.run(submission_analysis())
     logger.info("Submission analysis completed.")
