@@ -1,9 +1,9 @@
 {
     "database": {
-		"dbname": "reddit_analysis",
-		"user": "postgres",
-		"password": "xxxxxxxxxxx",
-		"host": "localhost"
+        "dbname": "reddit_analysis",
+        "user": "postgres",
+        "password": "xxxxxxxxxxx",
+        "host": "localhost"
 	},
     "subreddit": "xxxxxxxxxxxxxxxx",
     "client_id": "xxxxxxxxxxxxxxxxx",
@@ -13,8 +13,8 @@
 	"user_agent": "Reddit Scraper & Analyzer (by u/StinkyPete312)",
 	"max_concurrent_requests": 4,
 	"submission_sort": {
-		"method": "new",
-        "limit": 25
+    "method": "new",
+    "limit": 25
 	},
 	"comments_limit": 250,
 	"submissions_limit": 250,

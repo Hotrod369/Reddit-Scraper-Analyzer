@@ -53,19 +53,16 @@ def setup_reddit():
     Sets up the Reddit instance for scraping data, logging in, and loading the target subreddit.
     """
     logger.debug("Setting up Reddit instance...")
-    config = load_config()
-    reddit = login(config)
+    CONFIG = load_config()
+    reddit = login(CONFIG)
     logger.info("Logged into Reddit.")
-    if reddit is None:
-        logger.error("Reddit login failed; received None, aborting.")
-        raise Exception("Reddit login failed. See logs for details.")
     # Use the Reddit instance to make requests
     subreddit = reddit.subreddit('python')
     for submission in subreddit.hot(limit=10):
         print(submission.title)
-    return reddit, config
+    return reddit, CONFIG
 
-async def fetch_submissions_async(reddit, config):
+async def fetch_submissions_async(reddit, CONFIG):
     """
     Asynchronous wrapper for fetching submissions.
     This function runs the synchronous fetch_submissions in a thread.
@@ -73,22 +70,22 @@ async def fetch_submissions_async(reddit, config):
     from functools import partial
     loop = asyncio.get_running_loop()
     # Wrap the synchronous function in a partial to pass the arguments.
-    return await loop.run_in_executor(None, partial(fetch_submissions, reddit, config))
+    return await loop.run_in_executor(None, partial(fetch_submissions, reddit, CONFIG))
 
-def fetch_submissions(reddit, config):
+def fetch_submissions(reddit, CONFIG):
     """
-    Synchronous version fetches submissions from each subreddit based on the sorting method and limit specified in the configuration.
+    Synchronous version fetches submissions from each subreddit based on the sorting method and limit specified in the CONFIGuration.
     """
     logger.info("Fetching submissions...")
-    subreddit_names = config["subreddit"].split('+')
+    subreddit_names = CONFIG["subreddit"].split('+')
     # Get the submission sort settings
-    submission_sort = config.get("submission_sort", {"method": "new", "limit": 250})
+    submission_sort = CONFIG.get("submission_sort", {"method": "new", "limit": 250})
     sort_method = submission_sort["method"]
     try:
         submissions_limit = submission_sort["limit"]
-        logger.debug(f"Submission sort settings: {config.get('submission_sort')}")
+        logger.debug(f"Submission sort settings: {CONFIG.get('submission_sort')}")
     except (ValueError, TypeError):
-        logger.warning("Invalid submission limit value in config. Falling back to default of 10.")
+        logger.warning("Invalid submission limit value in CONFIG. Falling back to default of 10.")
         submissions_limit = 10
 
     all_submissions = []
@@ -131,7 +128,7 @@ def fetch_submissions(reddit, config):
 # Removed duplicate async def fetch_redditor_info_async to resolve the naming conflict.
 
 
-def fetch_comments_from_submissions(config, redditor):
+def fetch_comments_from_submissions(CONFIG, redditor):
     if not hasattr(redditor, 'created_utc'):
         logger.error(f"redditor '{redditor}' has no creation date.")
         return None
@@ -145,16 +142,16 @@ def fetch_comments_from_submissions(config, redditor):
     creation_time = redditor.created_utc
 
     try:
-        comments_limit = int(config.get("comments_limit", 250))
-        logger.debug(f"Comments limit: {config.get('comments_limit')}, Submissions limit for comments: {config.get('submissions_limit')}")
+        comments_limit = int(CONFIG.get("comments_limit", 250))
+        logger.debug(f"Comments limit: {CONFIG.get('comments_limit')}, Submissions limit for comments: {CONFIG.get('submissions_limit')}")
     except (ValueError, TypeError):
-        logger.warning("Invalid comments_limit in config; defaulting to 500.")
+        logger.warning("Invalid comments_limit in CONFIG; defaulting to 500.")
         comments_limit = 500
 
     try:
-        submissions_limit = int(config.get("submissions_limit", 100))
+        submissions_limit = int(CONFIG.get("submissions_limit", 100))
     except (ValueError, TypeError):
-        logger.warning("Invalid submissions_limit in config; defaulting to 100.")
+        logger.warning("Invalid submissions_limit in CONFIG; defaulting to 100.")
         submissions_limit = 100
 
     logger.debug(f"Comments limit: {comments_limit}")
@@ -226,7 +223,7 @@ def fetch_and_process_comments(reddit, submission):
         logger.error(f"Error fetching comments for submission {submission.id}: {e}")
         return []
     
-def _fetch_redditor_info_sync(reddit, config, redditor_name):
+def _fetch_redditor_info_sync(reddit, CONFIG, redditor_name):
     """
     Synchronous helper that does the real PRAW logic.
     """
@@ -247,7 +244,7 @@ def _fetch_redditor_info_sync(reddit, config, redditor_name):
             logger.error(f"Redditor '{redditor_name}' is missing 'link_karma' attribute; skipping.")
             return None
 
-        redditor_data = fetch_comments_from_submissions(config, redditor_obj)
+        redditor_data = fetch_comments_from_submissions(CONFIG, redditor_obj)
         if redditor_data:
             redditor_data["redditor_id"] = redditor_obj.id
         return redditor_data
@@ -262,7 +259,7 @@ def _fetch_redditor_info_sync(reddit, config, redditor_name):
         logger.error(f"Redditor '{redditor_name}' not found or error occurred: {e}")
         return None
 
-async def fetch_redditor_info_async(reddit, config, redditor_name, sem):
+async def fetch_redditor_info_async(reddit, CONFIG, redditor_name, sem):
     """
     Asynchronous wrapper that uses a semaphore to limit concurrency.
     """
@@ -271,11 +268,11 @@ async def fetch_redditor_info_async(reddit, config, redditor_name, sem):
         return await asyncio.to_thread(
             _fetch_redditor_info_sync,
             reddit,
-            config,
+            CONFIG,
             redditor_name
         )
         
-def process_submission(config, reddit, submission, redditor_data, submission_data):
+def process_submission(CONFIG, reddit, submission, redditor_data, submission_data):
     """
     Processes a single submission, extracting data and comments.
     """
@@ -284,7 +281,7 @@ def process_submission(config, reddit, submission, redditor_data, submission_dat
         author_name = submission.author.name if submission.author else 'Deleted'
         
         if author_name != 'Deleted':
-            redditor_info = _fetch_redditor_info_sync(reddit, config, author_name)  # Corrected order: reddit, config, author_name
+            redditor_info = _fetch_redditor_info_sync(reddit, CONFIG, author_name)  # Corrected order: reddit, CONFIG, author_name
             logger.debug(f"redditor info for {author_name}: {redditor_info}")
             if redditor_info:
                 redditor_data[author_name] = redditor_info
@@ -295,7 +292,7 @@ def process_submission(config, reddit, submission, redditor_data, submission_dat
             comment_author = comment['comment_author']
             logger.debug(f"Comment author: {comment_author}")
             if comment_author != 'Deleted' and comment_author not in redditor_data:
-                comment_redditor_info = _fetch_redditor_info_sync(reddit, config, comment_author)  # Corrected order: reddit, config, comment_author
+                comment_redditor_info = _fetch_redditor_info_sync(reddit, CONFIG, comment_author)  # Corrected order: reddit, CONFIG, comment_author
                 logger.debug(f"Comment redditor info: {comment_redditor_info}")
                 if comment_redditor_info:
                     redditor_data[comment_author] = comment_redditor_info
@@ -322,16 +319,16 @@ async def run_scraper_async():
     Asynchronous entry point for the scraper.
     """
     try:
-        reddit, config = setup_reddit()
+        reddit, CONFIG = setup_reddit()
 
         # Fetch submissions asynchronously (in a background thread)
-        submissions = await fetch_submissions_async(reddit, config)
+        submissions = await fetch_submissions_async(reddit, CONFIG)
         logger.debug(f"Found {len(submissions)} submissions.")
         redditor_data = {}
         submission_data = {}
 
         # Create a semaphore to limit the number of concurrent tasks (e.g., 10)
-        max_tasks = config.get("max_concurrent_requests", 4)
+        max_tasks = CONFIG.get("max_concurrent_requests", 4)
         semaphore = asyncio.Semaphore(max_tasks)
 
         # Define an async helper that wraps the synchronous process_submission call.
@@ -339,7 +336,7 @@ async def run_scraper_async():
             async with semaphore:
                 return await asyncio.to_thread(
                     process_submission,
-                    config,
+                    CONFIG,
                     reddit,
                     submission,
                     redditor_data,
