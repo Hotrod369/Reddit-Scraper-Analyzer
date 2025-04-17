@@ -1,38 +1,42 @@
 # Create tables script
 
 CREATE TABLE users (
-  username VARCHAR(255) PRIMARY KEY,
-  karma INTEGER,
-  awardee_karma INTEGER,
-  awarder_karma INTEGER,
-  total_karma INTEGER,
-  has_verified_email BOOLEAN,
+  redditor_id VARCHAR(255) PRIMARY KEY,
+  redditor VARCHAR(255) UNIQUE,  -- or you can omit if not needed
+  created_utc BIGINT,
   link_karma INTEGER,
   comment_karma INTEGER,
-  accepts_followers BOOLEAN,
+  total_karma INTEGER,
+  is_employee BOOLEAN,
+  is_mod BOOLEAN,
+  is_gold BOOLEAN,
   dormant_days INTEGER,
-  created_utc BIGINT
+  has_verified_email BOOLEAN,
+  accepts_followers BOOLEAN,
+  redditor_is_subscriber BOOLEAN
 );
 
 CREATE TABLE submissions (
-  id VARCHAR(255) PRIMARY KEY,
-  user_username VARCHAR(255),
+  submission_id VARCHAR(255) PRIMARY KEY,
+  author VARCHAR(255),
   title TEXT,
-  score INTEGER,
+  submission_score INTEGER,
   url TEXT,
-  created_utc BIGINT,
-  user_is_contributor BOOLEAN,
-  FOREIGN KEY (user_username) REFERENCES users(username)
+  submission_created_utc BIGINT,
+  over_18 BOOLEAN,
+  FOREIGN KEY (submission_id) REFERENCES submissions(submission_id)
 );
 
 CREATE TABLE comments (
-  id VARCHAR(255) PRIMARY KEY,
-  author VARCHAR(255),
+  comment_id VARCHAR(255) PRIMARY KEY,
+  comment_author VARCHAR(255),
+  comment_created_utc BIGINT,
   body TEXT,
-  score INTEGER,
-  submission_id VARCHAR(255),
-  FOREIGN KEY (author) REFERENCES users(username),
-  FOREIGN KEY (submission_id) REFERENCES submissions(id)
+  comment_score INTEGER,
+  is_submitter BOOLEAN,
+  edited BOOLEAN,
+  link_id VARCHAR(255),
+  FOREIGN KEY (comment_id) REFERENCES comments(comment_id)
 );
 
 # commands to query database in pgAdmin
@@ -50,7 +54,7 @@ TRUNCATE TABLE users, submissions, comments RESTART IDENTITY CASCADE;
 # If you want to clear the tables automatically when running the json_to_db.py instead of running
 # the script manually  add the following try block.
 try:
-    cur.execute("TRUNCATE TABLE users, submissions, comments RESTART IDENTITY CASCADE;")
+    cur.execute("TRUNCATE TABLE redditors, submissions, comments RESTART IDENTITY CASCADE;")
     conn.commit()
     logger.info("Tables have been cleared.")
 except psycopg2.DatabaseError as e:

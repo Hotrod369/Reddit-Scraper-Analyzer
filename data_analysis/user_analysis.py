@@ -1,223 +1,276 @@
-import json
-import datetime as dt
-from openpyxl import Workbook
-from openpyxl.worksheet.worksheet import Worksheet  # noqa: F401
-import pandas as pd
-import psycopg2
-from tqdm import tqdm
-from data_analysis.cal_acc_age import calculate_account_age
-from data_analysis.id_low_karma import identify_low_karma_accounts
-from data_analysis.id_young_acc import identify_young_accounts
-from tools.config.logger_config import init_logger
-import logging
+from tqdm import tqdm  # For progress display
+import asyncpg
+import asyncio
+import re
+from nltk.sentiment import SentimentIntensityAnalyzer
+from nltk import word_tokenize, pos_tag, ne_chunk, ngrams
+from tools.download_nltk_data import load_nltk_data
+from tools.config.config_loader import CONFIG
+from tools.config.logger_config import init_logger, logging
+
 
 logger = logging.getLogger(__name__)
-logger.info("User analysis Basic logging set")
+logger.info("Submission Analysis Module Logging Set")
 init_logger()
+load_nltk_data()
 
-def load_config():
+# ------------------------------------------------
+# 1) CONNECT TO DATABASE (asyncpg)
+# ------------------------------------------------
+async def connect_to_database():
     """
-    The `load_config` function loads the configuration from a JSON file.
+    Establish an asyncpg connection using the config in CONFIG.
     """
-    with open('tools/config/config.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    logger.info("Config loaded")
-    return config
-
-def connect_to_database(config):
-    """
-    The `connect_to_database` function connects to a PostgreSQL database using the provided configuration.
-    """
+    cfg = CONFIG["database"]
     try:
-        return psycopg2.connect(
-            dbname=config['database']['dbname'],
-            user=config['database']['user'],
-            password=config['database']['password'],
-            host=config['database']['host'],
+        conn = await asyncpg.connect(
+            user=cfg["user"],
+            password=cfg["password"],
+            database=cfg["dbname"],
+            host=cfg["host"],
+            port=cfg.get("port", 5432),
         )
+        logger.info("Async database connection successful.")
+        return conn
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
-        logger.info("Database connection successful")
         return None
 
-def fetch_users(conn):
+
+# ------------------------------------------------
+# 2) FETCH SUBMISSIONS
+# ------------------------------------------------
+async def fetch_submissions(conn):
     """
-    The `fetch_users` function retrieves users data from a database using a cursor and logs
-    relevant information.
+    Retrieves submission data from the database using asyncpg.
+
+    Returns:
+        List of asyncpg.Record objects, each with columns:
+            - submission_id
+            - author
+            - title
+            - submission_score
+            - url
+            - submission_created_utc
+            - over_18
+    """
+    query = """
+        SELECT
+            submissions.submission_id,
+            submissions.author,
+            submissions.title,
+            submissions.submission_score,
+            submissions.url,
+            submissions.submission_created_utc,
+            submissions.over_18
+        FROM submissions
+        JOIN users
+        ON submissions.author = users.redditor
+        ORDER BY submissions.submission_id
     """
     try:
-        with conn.cursor() as cur:
-            # Corrected SQL query that performs a left join and aggregates data correctly
-            cur.execute("""
-                SELECT
-                    users.username,
-                    users.karma,
-                    users.awardee_karma,
-                    users.awarder_karma,
-                    users.total_karma,
-                    users.has_verified_email,
-                    users.link_karma,
-                    users.comment_karma,
-                    users.accepts_followers,
-                    users.created_utc,
-                    users.dormant_days,
-                    array_agg(submissions.created_utc ORDER BY submissions.created_utc) AS post_times
-                FROM users
-                LEFT JOIN submissions ON users.username = submissions.user_username
-                GROUP BY users.username
-            """)
-            return cur.fetchall()
+        rows = await conn.fetch(query)
+        logger.info(f"Fetched {len(rows)} submissions for analysis.")
+        return rows
+    except asyncpg.PostgresError as pg_err:
+        logger.error(f"A PostgreSQL error occurred: {pg_err}")
+        return []
     except Exception as e:
-        logger.error(f"Error fetching users from database: {e}")
+        logger.exception(f"An error occurred in fetch_submissions: {e}")
         return []
 
-def analyze_burst_activity(post_times, config):
+# ------------------------------------------------
+# 3) UTILITY / ANALYSIS FUNCTIONS
+# ------------------------------------------------
+def analyze_submission_title(title: str) -> dict:
     """
-    Analyzes the burst activity of a user by comparing the time differences between consecutive posts,
-    adjusted to handle TimedeltaIndex with iloc.
+    Perform NLTK-based analysis on a submission title.
+    Returns a dict with named_entities, lexical_diversity, and common_bigrams.
     """
-    # Fetch period values from the config
-    inactivity_days = config.get('inactivity_period', 30)  # Default to 30 if not set
-    burst_days = config.get('burst_period', 2)  # Default to 2 if not set
+    # Tokenize the title.
+    tokens = word_tokenize(title)
+    # POS-tag the tokens.
+    tagged_tokens = pos_tag(tokens)
+    # Run named entity recognition.
+    ner_tree = ne_chunk(tagged_tokens)
+    named_entities = ", ".join(
+        str(chunk) for chunk in ner_tree if hasattr(chunk, "label")
+    )
 
-    # Define inactivity and burst activity periods using values from the config
-    inactivity_period = pd.to_timedelta(f"{inactivity_days} days")
-    burst_period = pd.to_timedelta(f"{burst_days} days")
+    # Lexical diversity
+    lex_div = len(set(tokens)) / len(tokens) if tokens else 0.0
+    # Extract bigrams
+    bigrams_list = list(ngrams(tokens, 2))
+    common_bigrams = ", ".join([" ".join(b) for b in bigrams_list[:5]])
 
-    # Filter out None values and ensure the list is not empty
-    if not post_times or all(x is None for x in post_times):
-        return False
-
-    # Convert to pandas datetime series and drop any NaT or NaN entries
-    times = pd.to_datetime(post_times, unit='s').dropna()
-
-    # Ensure times is not empty and has valid datetime entries
-    if times.empty:
-        return False
-
-    # Calculate time differences between consecutive timestamps and convert to Series
-    time_diffs = pd.Series(times.diff()[1:])  # Skip the first entry which is NaT
-
-    # Check for burst activity
-    burst_activity_exists = False
-    for i in range(len(time_diffs) - 1):
-        if time_diffs.iloc[i] > inactivity_period:
-            # Check if the following entries are within the burst period
-            for j in range(1, len(time_diffs) - i):
-                if time_diffs.iloc[i + j] < burst_period:
-                    burst_activity_exists = True
-                    break
-            if burst_activity_exists:
-                break
-
-    return burst_activity_exists
-
-# Example usage (commented out for now):
-# config = {"inactivity_period": 30, "burst_period": 2}
-# post_times = [1609459200, 1612137600, 1612224000]  # Unix timestamps
-# print(analyze_burst_activity_fixed(post_times, config))
+    return {
+        "named_entities": named_entities,
+        "lexical_diversity": lex_div,
+        "common_bigrams": common_bigrams,
+    }
 
 
-def analyze_users(users, config):
+def lex_div(text: str) -> tuple[float, str]:
     """
-    Analyzes users and returns a list of dictionaries containing user data.
+    Calculates lexical diversity of a text and returns (diversity_score, label).
     """
-    logger.info("Analyzing users")
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    tokens = word_tokenize(text)
+    if not tokens:
+        return 0.0, "No text"
+
+    diversity_score = len(set(tokens)) / len(tokens)
+    if diversity_score > 0.7:
+        diversity_label = "Highly diverse"
+    elif diversity_score > 0.4:
+        diversity_label = "Moderately diverse"
+    else:
+        diversity_label = "Less diverse"
+
+    return diversity_score, diversity_label
+
+def mark_duplicate_submissions(analysis_results):
+    """
+    Given a list of submission dicts (each with at least
+    'Author', 'Title', 'URL'), find duplicates posted by the same user
+    with the same title and same link.
+
+    Returns a modified copy of analysis_results, where each dict
+    has a new key "Is Duplicate" (bool).
+    """
+    from collections import defaultdict
+
+    # 1) Group submissions by (Author, Title, URL)
+    #    Normalizing them is optional but recommended (e.g. .lower(), strip()).
+    groups = defaultdict(list)
+    for idx, sub in enumerate(analysis_results):
+        author = sub["Author"].strip().lower()
+        title = sub["Title"].strip().lower()
+        url = sub["URL"].strip().lower()
+        key = (author, (title, url))
+        groups[key].append(idx)
+
+    # 2) Mark duplicates
+    #    If a group has more than 1 submission, all of them are duplicates.
+    for indices in groups.values():
+        if len(indices) > 1:
+            # We have duplicates
+            for i in indices:
+                analysis_results[i]["Is Duplicate"] = True
+        else:
+            # Only 1 submission in that group => not a duplicate
+            analysis_results[indices[0]]["Is Duplicate"] = False
+
+    return analysis_results
+
+def analyze_data(submissions):
+    """
+    Analyze a list of submissions.
+    Returns a list of dicts with:
+        - Submission ID
+        - Author
+        - Title
+        - Submission Score
+        - URL
+        - Created UTC
+        - Sentiment
+        - Named Entities
+        - Lexical Diversity
+        - Common Bigrams
+        - Is Duplicate
+    """
+    SIA = SentimentIntensityAnalyzer()
     results = []
-    for user in tqdm(users, desc=f"Analyzing users ({len(users)})"):
-        # Each 'user' is a list or tuple with the correct order of values
-        # Adjust the unpacking according to the actual structure of 'user'
-        username, karma, awardee_karma, awarder_karma, total_karma, has_verified_email, link_karma,\
-            comment_karma, accepts_followers, created_utc, dormant_days, post_times = user
+    
+    # Process each submission and build the analysis record
+    for submission in tqdm(submissions, desc="Analyzing Submissions", unit="submission"):
+        # submission is an asyncpg.Record or tuple
+        (submission_id, author, title, submission_score, url, submission_created_utc, over_18) = submission
 
-        account_age_years = calculate_account_age(created_utc)
-        criteria_met_age = identify_young_accounts(account_age_years, config)
-        criteria_met_karma = identify_low_karma_accounts(total_karma, config)
-        criteria_met = criteria_met_age or criteria_met_karma
+        # Sentiment analysis
+        sentiment_score = SIA.polarity_scores(title)["compound"]
+        if sentiment_score >= 0.05:
+            sentiment_label = "Positive"
+        elif sentiment_score <= -0.05:
+            sentiment_label = "Negative"
+        else:
+            sentiment_label = "Neutral"
+        sentiment_cell_value = f"{sentiment_score:.3f} ({sentiment_label})"
 
-        # New burst activity analysis
-        burst_activity = analyze_burst_activity(post_times, config)
-        logger.info(f"Burst activity for {username}: {burst_activity}")
+        # Additional NLTK-based analysis
+        title_analysis = analyze_submission_title(title)
 
-        user_data = {
-            'Username': username,
-            'Karma': karma,
-            'Awardee Karma': awardee_karma,
-            'Awarder Karma': awarder_karma,
-            'Has Verified Email': 'Yes' if has_verified_email else 'No',
-            'Link Karma': link_karma,
-            'Comment Karma': comment_karma,
-            'Accepts Followers': 'Yes' if accepts_followers else 'No',
-            'Account Created': dt.datetime.fromtimestamp(created_utc).strftime('%Y-%m-%d %H:%M:%S')\
-                if created_utc else 'Unknown',
-            'Dormant Days': dormant_days,
-            'Account Age': account_age_years,
-            'Total Karma': total_karma,
-            'Low Karma': 'Low Karma' if criteria_met_karma else '',
-            'Criteria': 'Criteria Met' if criteria_met else 'Not Met',
-            'Young Account': 'Young Account' if criteria_met_age else '',
-            'Burst Activity': 'Yes' if burst_activity else 'No',  # Add burst activity to the results
+        # Build a record without the duplicate flag first
+        record = {
+            "Submission ID": submission_id,
+            "Author": author,
+            "Title": title,
+            "Score": submission_score,
+            "URL": url,
+            "Created UTC": submission_created_utc,
+            "NSFW": over_18,
+            "Sentiment": sentiment_cell_value,
+            "Named Entities": title_analysis["named_entities"],
+            "Lexical Diversity": title_analysis["lexical_diversity"],
+            "Common Bigrams": title_analysis["common_bigrams"],
+            # "Is Duplicate" will be set later
         }
-        results.append(user_data)
-        logger.info("Analyzed users")
+        results.append(record)
+    
+    # Mark duplicates on the entire results list
+    results = mark_duplicate_submissions(results)
+    logger.info("Submission data analysis completed.")
     return results
 
-def write_to_excel(analyzed_users, file_path):
+# --------------------------------
+# 4) MAIN SUBMISSION ANALYSIS FLOW
+# --------------------------------
+async def submission_analysis():
     """
-    Writes user data to an Excel file.
+    Orchestrates the submission data analysis process.
+    1) Connect to DB
+    2) Fetch submissions
+    3) Analyze
+    4) Optionally: store or return results
     """
-    logger.info("Writing users analysis results to Excel file")
-    workbook = Workbook()
-    sheet = workbook.active
-    if not sheet:
-        sheet = workbook.create_sheet(title="User Data Analysis")
-    else:
-        sheet.title = "User Data Analysis"
+    logger.info("Starting submission analysis")
 
-    headers = ["Username", "Karma", "Awardee Karma", "Awarder Karma", "Has Verified Email", 
-                "Link Karma", "Comment Karma", "Accepts Followers", "Account Created", 
-                "Account Age", "Total Karma", "Low Karma", "Criteria", "Young Account", 
-                "Dormant Days", "Burst Activity"]
-    sheet.append(headers)
+    # 1) Connect to DB
+    conn = await connect_to_database()
+    if conn is None:
+        logger.error("Could not connect to the database.")
+        return
 
-    # Append each user's data to the sheet
-    for user_data in analyzed_users:
-        row = [user_data.get(header, "N/A") for header in headers]  # Use .get() to handle missing keys safely
-        sheet.append(row)
+    try:
+        # 2) Fetch submissions
+        submissions = await fetch_submissions(conn)
+        if not submissions:
+            logger.warning("No submissions found to analyze.")
+            return
 
-    workbook.save(file_path)
-    logger.info(f"User analysis results saved to {file_path}")
+        # 3) Analyze
+        analysis_results = analyze_data(submissions)
+        logger.info("Analyzing submissions completed.")
 
-    def validate_data(headers, analyzed_users):
-        return [header for header in headers if header not in analyzed_users[0]]
+        # 3a) Mark duplicates
+        analysis_results = mark_duplicate_submissions(analysis_results)
 
-    if missing_data := validate_data(headers, analyzed_users):
-        logger.error(f"Missing data detected: {missing_data}")
-        # Handle missing data (e.g., raise an exception, skip writing, write defaults, etc.)
-        raise ValueError("Some user data entries are missing expected keys.")
+        # 4) Optionally: store or return results
+        logger.debug(analysis_results)
 
-    for user_data in analyzed_users:
-        row = [user_data[header] for header in headers]  # Using direct access instead of .get() to force an error if key is missing
-        sheet.append(row)
-        logger.debug(f"User data for Excel row: {user_data}")
+    except asyncpg.PostgresError as e:
+        logger.error(f"Error during submission analysis (asyncpg): {e}")
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred during submission_analysis: {e}")
+    finally:
+        # 5) Clean up
+        await conn.close()
+        logger.info("Submission analysis completed, connection closed.")
 
-    workbook.save(file_path)
-    logger.info(f"Users analysis results saved to {file_path}")
-
-def user_analysis():
-    """
-    The `user_analysis` function orchestrates the user data analysis process.
-    """
-    logger.info("Starting user analysis")
-    # Load the configuration file and connect to the database
-    config = load_config()
-    if conn := connect_to_database(config):
-        users = fetch_users(conn)
-        analyzed_users = analyze_users(users, config)
-        write_to_excel(analyzed_users, 'analysis_results/users_analysis.xlsx')
-        conn.close()
-        logger.info("Database connection closed.")
 
 if __name__ == "__main__":
-    user_analysis()
-    logger.info("User analysis completed.")
+    asyncio.run(submission_analysis())
+    logger.info("Submission analysis completed.")

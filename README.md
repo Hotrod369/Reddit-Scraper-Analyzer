@@ -2,241 +2,412 @@
 
 ## Overview
 
-The **Reddit Scraper & Analyzer** is an advanced tool designed to navigate through the complexities of Reddit's vast data landscape, extracting and processing data to uncover insightful patterns and behaviors. It is particularly adept at identifying anomalous activities indicative of bots, trolls, or other potentially malicious entities.
+The **Reddit Scraper & Analyzer** is an advanced tool designed to navigate Reddit’s vast data landscape—extracting and processing data to uncover insightful patterns and behaviors. It is especially useful for detecting anomalous activities such as bot spamming, trolling, or other potentially malicious behavior.
 
-It operates in <u>read-only</u> mode using the **Python Reddit API Wrapper (PRAW)** for robust data extraction, the tool gathers comprehensive information from specified subreddit's, including posts, comments, and user metrics. This data then undergoes detailed analysis, leveraging the **Natural Language Toolkit (NLTK)** for sophisticated text processing and sentiment analysis. This analysis assesses various parameters such as karma scores, account ages, and activity patterns to detect irregularities and understand the sentiment behind user comments.
+The tool leverages:
 
-Additionally, the system integrates **PostgreSQL**, a powerful open-source relational database, to manage and store large volumes of data efficiently. This allows for advanced querying capabilities and secure storage of the scraped data, facilitating complex data analysis tasks.
+- **PRAW (Python Reddit API Wrapper):** For robust data extraction from Reddit.
+- **NLTK (Natural Language Toolkit):** For detailed text processing, including sentiment analysis, named entity recognition, lexical diversity, and n‑gram extraction.
+- **PostgreSQL:** For efficient storage and querying of the scraped data.
+- **Openpyxl & Tqdm:** To generate detailed Excel reports with progress feedback.
 
-The **Reddit Scraper & Analyzer** is built with flexibility in mind, enabling users to customize the scraping and analysis processes according to specific research needs or investigative criteria. It encapsulates the complexity of its operations behind a user-friendly interface, making advanced data analysis accessible to those with limited technical backgrounds.
+Designed with flexibility in mind, the tool allows you to customize scraping and analysis parameters via a configuration file. Whether you're a digital researcher, social media analyst, or cybersecurity professional, the Reddit Scraper & Analyzer delivers the insights you need to understand and act upon Reddit’s dynamic environment.
 
-Serving as a critical resource for digital researchers, social media analysts, and cybersecurity professionals, the **Reddit Scraper & Analyzer** provides the necessary data and insights to understand and act upon the dynamic and often opaque world of Reddit.
+---
 
 ## Features
 
-**Data Scraping:** Utilize the `scraper.py` module, operating in read-only mode, to collect posts, comments, and user information from specified subreddit's.
+- **Data Scraping:**  
+  Collect posts, comments, and user information from specified subreddits using the `scraper.py` module.
 
-**JSON File Generation:** The scraper will output two JSON files containing user data (user_data.json) and submission data (submission_data.json). Here are examples of the expected JSON structures:
+- **JSON File Generation:**  
+  The scraper outputs two JSON files:
+  - **redditor_data.json:** Contains user data (e.g., username, karma, account creation timestamp, etc.).
+  - **submission_data.json:** Contains submission data (e.g., submission ID, title, URL, etc.).
 
-user_data.json:
+- **Database Integration:**  
+  The tool inserts the scraped data into a PostgreSQL database for advanced querying and analysis.
 
-```json
-{
-    "username": "example_user",
-    "Karma": 12345,
-    "created_utc": 1532312506.0,
-    ...
-}
-```
+- **Data Analysis:**  
+  - **Comment Analysis:** Performs sentiment analysis, named entity recognition, and more on comment text.  
+  - **Submission Analysis:** Analyzes submission titles using sentiment analysis and additional NLTK-based metrics (named entities, lexical diversity, common bigrams).  
+  - **User Analysis:** Evaluates user behavior and characteristics (e.g., karma, account age, burst activity) to help identify suspicious accounts.
 
-submission_data.json:
+- **Excel Reporting:**  
+  Generate comprehensive Excel reports for:
+  - **User Analysis:** `user_analysis.xlsx`  
+  - **Comment Analysis:** `comment_analysis.xlsx`  
+  - **Submission Analysis:** `submission_analysis.xlsx`
 
-```json
-{
-    "id": "submission_id",
-    "User": "example_user",
-    "title": "Interesting post title",
-    ...
-}
-```
+- **Customization:**  
+  Adjust scraping parameters, analysis thresholds, and reporting formats via a centralized `config.json` file.
 
-**Data Extraction:** Extract user and submission data including usernames, karma, account creation dates, post titles, scores, etc.
+---
 
-**Analysis:** Analyze user behavior, account characteristics, and other attributes to identify potential bots or trolls. The analysis process now includes progress bars to provide real-time feedback on the progress of scraping and data processing tasks, ensuring transparency and user awareness.
+## Requirements
 
-**Reporting:** Generate reports summarizing the findings of the analysis, including statistics, insights, and visualizations.
+- **Python Version:** 3.12.1 (or compatible)
+- **Required Python Packages:** (see `requirements.txt`)
+  - PRAW 7.7.1  
+  - Pandas 2.2.1  
+  - Openpyxl 3.1.2  
+  - Requests 2.31.0  
+  - NLTK 3.8.1  
+  - psycopg2-binary > 2.9.9  
+  - tqdm 4.66.2  
+  - *(and others as specified in requirements.txt)*
 
-**Customization:** Configure scraping parameters, analysis criteria, and reporting formats to suit specific needs.
-
-**Integration:** Easily integrate with other Python libraries and tools for additional analysis or processing.
-
-**Requirements:**
-
-- Python 3.12.1
-
-**Required Python packages** (specified in requirements.txt)
-
-- PRAW 7.7.1
-- Pandas 2.2.1
-- Openpyxl 3.1.2
-- Requests 2.31.0
-- NLTK 3.8.1
-- psycopg2-binary> 2.9.9
+---
 
 ## Installation
 
-### 1. Clone this repository to your local machine
+### 1. Clone the Repository
 
-`git clone https://github.com/Hotrod369/Reddit-Scraper-Analyzer.git`
+```bash
+git clone https://github.com/Hotrod369/Reddit-Scraper-Analyzer.git
+```
 
-### 2. Navigate to the project directory
+### 2. Navigate to the Project Directory
 
-`cd Reddit-Scraper-Analyzer`
+```bash
+cd Reddit-Scraper-Analyzer
+```
 
-### 3. Install the required Python packages using the requirements.txt by running the following command file
+### 3. Install the Required Packages
 
-`pip install -r requirements.txt`
+```bash
+pip install -r requirements.txt
+```
+
+---
 
 ## Database Setup
 
 ### Installing PostgreSQL
 
-1. **Download PostgreSQL:** Go to the official [PostgreSQL download page](https://www.postgresql.org/download/) and select the appropriate version for your operating system. Follow the instructions to download and install PostgreSQL.
+1. **Download PostgreSQL:**  
+   Visit the [PostgreSQL download page](https://www.postgresql.org/download/) and follow the instructions for your operating system.
 
-2. **Install PostgreSQL:** Run the installer and follow the prompts to set up PostgreSQL on your machine. During installation you will be prompted to enter a password for the superuser profile don't lose it, as you will need it to access the PostgreSQL database server.
+2. **Install PostgreSQL:**  
+   Run the installer and set a password for the superuser (postgres). Keep this password handy for database configuration.
 
-### Creating the Database
+---
 
-**Access the PostgreSQL command line tool:**
+### Creating / Updating the Database
 
-1. On Windows, you can use the SQL Shell (psql) that comes with the
+> **Important:** If you have used this tool previously, please **drop your old database tables** and recreate them using the **new** schema. The schema has changed (table columns and keys), and older tables are incompatible.
 
-- PostgreSQL installation.
-- On macOS and Linux, you can open a terminal and enter psql to access the PostgreSQL command line tool.
+1. **Access the PostgreSQL Command Line Tool (psql):**  
+   - On Windows: Use the SQL Shell (psql) provided with PostgreSQL.  
+   - On macOS/Linux: Open a terminal and run `psql -U postgres`.
 
-2. **Log in to PostgreSQL:**
+2. **Create a New Database (if you haven’t already):**
 
-`psql -U postgres`
+```sql
+CREATE DATABASE reddit_analysis;
+```
 
-Enter the password for the postgres user when prompted.
+3. **Connect to the Database:**
 
-3. **Create a new database for your project:**
+```sql
+\c reddit_analysis
+```
 
-`CREATE DATABASE reddit_analysis;`
+3a. **Drop Existing Tables (if upgrading from an older version):**
 
-4. **Connect to the newly created database:**
+```sql
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS submissions;
+DROP TABLE IF EXISTS users;
+```
 
-`\c reddit_analysis`
+4. **Create the New Tables:**
 
-### Creating the Database Tables
+```sql
+CREATE TABLE users (
+  redditor_id VARCHAR(255) PRIMARY KEY,
+  redditor VARCHAR(255) UNIQUE,
+  created_utc BIGINT,
+  link_karma INTEGER,
+  comment_karma INTEGER,
+  total_karma INTEGER,
+  is_employee BOOLEAN,
+  is_mod BOOLEAN,
+  is_gold BOOLEAN,
+  dormant_days INTEGER,
+  has_verified_email BOOLEAN,
+  accepts_followers BOOLEAN,
+  redditor_is_subscriber BOOLEAN
+);
 
-1. **Execute the SQL script** to create the tables needed for your application. You can copy and paste the commands from your database_setup.sql.txt file into the psql command line tool or use a PostgreSQL GUI like pgAdmin.
+CREATE TABLE submissions (
+  submission_id VARCHAR(255) PRIMARY KEY,
+  author VARCHAR(255),
+  title TEXT,
+  submission_score INTEGER,
+  url TEXT,
+  submission_created_utc BIGINT,
+  over_18 BOOLEAN
+);
 
-2. **Verify the table's creation by running:**
+CREATE TABLE comments (
+  comment_id VARCHAR(255) PRIMARY KEY,
+  comment_author VARCHAR(255),
+  comment_created_utc BIGINT,
+  body TEXT,
+  comment_score INTEGER,
+  is_submitter BOOLEAN,
+  edited BOOLEAN,
+  link_id VARCHAR(255)
+);
+```
 
-`\dt`
+You can verify table creation by running `\dt` in psql.
 
-This command will list all tables in the current database, and you should see users, submissions, and comments listed.
+---
 
-Automating Table Clearing (Optional)
-If you wish to clear the tables automatically when running json_to_db.py, include the provided try block in your Python script as indicated in the database_setup.sql.txt file. This is useful for development or testing purposes but should be used with caution in a production environment.
+## Configuration
+
+This project requires a **`config.json`** file containing your Reddit API credentials, database connection parameters, and various scraper/analysis settings. A template file named **`Rename-to-config.json`** is provided in `tools/config`.
+
+1. **Locate the Template File**  
+   Go to `tools/config/Rename-to-config.json` and open it in a text editor.
+
+2. **Rename & Update**  
+   - Rename the file to **`config.json`**.  
+   - Replace the placeholder values (`xxxxxx`) with your **actual** credentials and desired parameter values. For example:
+     ```json
+     {
+       "database": {
+         "dbname": "reddit_analysis",
+         "user": "postgres",
+         "password": "MySecretPassword",
+         "host": "localhost"
+       },
+       "subreddit": "mySubreddit+myOtherSubreddit",
+       "client_id": "myRedditAppClientID",
+       "client_secret": "myRedditAppSecret",
+       "username": "myRedditUsername",
+       "password": "myRedditPassword",
+       "user_agent": "Reddit Scraper & Analyzer (by u/YourUsername)",
+       "max_concurrent_requests": 4,
+       "submission_sort": {
+         "method": "new",
+         "limit": 25
+       },
+       "comments_limit": 250,
+       "submissions_limit": 250,
+       "karma_threshold": 500,
+       "account_age_threshold": 0.5,
+       "inactivity_period": 3,
+       "burst_period": 1,
+       "notes": [
+          "Configure how submissions are fetched: ‘method’ controls sorting (`new`, `hot`, etc.) and `limit` balances depth vs speed (e.g., lower limits for quick scans, higher for thorough research).",
+
+          "Fine-tune `comments_limit` and `submissions_limit` here to adjust the number of comments/submissions per post or user—lower values shorten runtime, higher values yield richer context.",
+
+          "Use `karma_threshold` and `account_age_threshold` to flag potentially suspicious accounts: lower values catch new or low-engagement users, higher values focus on matured profiles.",
+
+          "Adjust `inactivity_period` and `burst_period` to detect bursty activity patterns—short gaps highlight rapid reposting, longer gaps reduce false positives from normal behavior cycles.",
+
+          "Use `max_concurrent_requests` to control how many API calls run in parallel—lower values help avoid rate‑limit errors, higher values speed up scraping on faster connections."
+       ]
+     }
+     ```
+
+3. **Parameter Descriptions:**
+Below is an in‑depth guide to every setting in the example above:
+
+ - **database**
+Holds your PostgreSQL connection info.
+
+    * dbname, user, password, host: must all match your local or remote database setup.
+
+- **subreddit**
+A single string of subreddit names separated by + (e.g. "python+learnprogramming"). The scraper will iterate through each.
+
+- **client_id, client_secret, username, password,user_agent**
+Your Reddit API app credentials and login.
+
+    * user_agent should be unique and descriptive per Reddit’s API rules (e.g. including your Reddit username).
+
+- **max_concurrent_requests**  
+Maximum number of simultaneous requests the scraper will fire off.
+
+    * Lower values (e.g. 1–2) reduce the chance of hitting Reddit’s rate limits but slow throughput.
+
+    * Higher values speed up scraping on powerful machines/network connections but risk more “429” responses.
+
+- **submission_sort.method**
+One of "new", "hot", "top", "rising", or "controversial".
+
+    * Use new for purely chronological scraping.
+
+    * hot/top surfaces the most popular content but may miss fresh posts.
+
+    * rising is great for catching early viral threads.
+- **submission_sort.limit**
+How many posts to fetch per subreddit.
+
+    * Lower values (10–50) give a quick snapshot; higher values (250+) dig deeper but increase runtime and API calls.
+
+ - **comments_limit**
+Maximum number of comments to fetch per submission.
+
+    * If you’re hunting bot networks or spam threads, you may need hundreds; for a light survey, 10–50 suffices.
+
+ - **submissions_limit**
+When fetching each user’s history (link and comment karma analysis), how many of their own submissions to pull.
+
+    * Controls the depth of user profiling; high values slow things down but yield richer “burst activity” signals.
+
+ - **karma_threshold**
+A floor for “total karma” below which accounts may be flagged.
+
+    * Useful for spotting throwaway or drive‑by accounts; raising this makes detection stricter.
+
+ - **account_age_threshold**
+Age in years (can be fractional) below which accounts are considered “young.”
+
+    * Combines with inactivity/burst metrics to pinpoint newly created spam bots.
+
+ - **inactivity_period & burst_period**
+Used to detect “burst” posting behavior:
+
+    * Inactivity period (days): minimum gap of no posts before a suspicious burst.
+
+    * Burst period (days): subsequent rapid‑fire posting window.
+
+    * For example, inactivity_period: 3 and burst_period: 1 flags accounts silent for 3+ days then posting multiple times in a day.
+
+**notes**
+A free‑form array to document any custom tweaks, reminders, or special instructions for your own reference.
+
+4. **Save & Verify**  
+   Ensure your final file is named **`config.json`** and placed in the `tools/config` directory.  
+   When you run the scraper or `main.py`, it will load these parameters to log into Reddit and connect to your database.
+
+That’s it! You now have a properly configured **`config.json`**. Once your credentials and parameters are in place, you can proceed with [running the tool](#usage) to scrape data, insert it into the database, and generate Excel reports.
+
+---
 
 ## Usage
 
-**To effectively use the Universal Reddit Scraper & Analyzer, follow these steps:**
+To run the complete application (scraping, JSON→DB insertion, analyses, and Excel generation), execute the `main.py` script from the root directory:
 
-### 1. Setting Up config.json
-
-**Configuration Details**
-Ensure your config.json file is set up correctly to define scraping parameters and database connection details. The config.json should be located in the tools/config directory.
-
-First, configure your config.json file in tools/config directory with your Reddit API credentials and desired scraping parameters. You will also need to enter your PostgreSQL credentials.
-
-```json
-{
-    "database": {
-		"dbname": "reddit_analysis",
-		"user": "postgres",
-		"password": "xxxxxxxxxxx",
-		"host": "localhost"
-	},
-    "subreddit": "xxxxxxxxxxxxxxxx",
-    "client_id": "xxxxxxxxxxxxxxxxx",
-    "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "user_agent": "Reddit Scraper (by u/StinkyPete312)",
-	"post_sort": {
-		"method": "new",
-		"limit": 100
-	},
-	"comments_limit": 500,
-	"submissions_limit": 100,
-	"notes": [
-			"You can choose from 'top', 'hot', 'new', 'rising', or 'controversial' for post sorting.",
-			"Account Age Threshold is set in years it can be a decimal"
-	],
-	"karma_threshold": 500,
-	"account_age_threshold": 0.5,
-	"inactivity_period": 3,
-	"burst_period": 1
-}
+```bash
+python main.py
 ```
 
-**subreddit:** Specify the subreddit from which you want to scrape data. Multiple subreddit's can be scraped by separating with a `+` like this `"subreddit1+subreddit2+subreddit3"`
+**What Happens**:
 
-**client_id & client_secret:** Your Reddit application's credentials.
+1. **Scraper:**  
+   - The `scraper.py` module logs into Reddit and fetches posts, comments, and user data from the specified subreddits.  
+   - It writes two JSON files to the `analysis_results/` directory: `redditor_data.json` and `submission_data.json`.
 
-**username & password:** Your Reddit account credentials for authentication.
+2. **Database Insertion:**  
+   - The `json_to_db.py` script reads those JSON files and inserts them into your PostgreSQL database using asyncpg.
 
-**user_agent:** A descriptive user agent to help Reddit identify your script.
+3. **Analyses & Excel Generation:**  
+   - **Comment Analysis**: Performs sentiment and text analysis on comments.  
+   - **Submission Analysis**: Additional metrics for each submission (sentiment, lexical diversity, etc.).  
+   - **User Analysis**: Karma, account creation, burst activity, etc.  
+   - Each analysis is written to an Excel file in the `analysis_results/` folder.
 
-**post_sort, method, and limit:** Defines how you want to sort the posts and the number of posts to scrape.
+### Command-Line Arguments
 
-**notes:** Additional notes or parameters for reference.
+`main.py` supports optional flags for partial runs:
 
-**karma_threshold & account_age_threshold:** Criteria for analyzing and identifying potential bots.
+- `--excel-only`  
+  Runs only the Excel generation modules (no scraping, no JSON→DB).
+- `--scraper-only`  
+  Runs only the scraper to produce JSON files (no DB insertion or Excel generation).
+- `--json-to-db-only`  
+  Runs only the JSON→DB insertion step (assumes JSON files exist).
+- `--comment-analysis-excel-only`  
+  Generates only the **comment analysis** Excel file.
+- `--submission-excel-only`  
+  Generates only the **submission analysis** Excel file.
+- `--user-analysis-excel-only`  
+  Generates only the **user analysis** Excel file.
 
-### 2. Running the app
+For example:
 
-**Execute the main.py script to start scraping Reddit based on the parameters set in your config.json:**
+```bash
+# Only run scraper to produce the JSON files
+python main.py --scraper-only
 
-`python -m main`
+# Only run DB insertion
+python main.py --json-to-db-only
 
-This step will collect posts and comments from the specified subreddit and save them into JSON files (user_data.json and submission_data.json).
+# Only generate the comment analysis Excel
+python main.py --comment-analysis-excel-only
+```
 
-Then performs sentiment analysis on comments, evaluates user data, and identifies potential bots or suspicious accounts based on the karma and account age thresholds specified in your config. It generates an Excel report (potential_bot_accounts.xlsx) summarizing the findings.
+If **no arguments** are provided, it runs the **full pipeline** (scraping → DB insertion → analyses → Excel).
 
-### 4. Reviewing the Analysis
+---
 
-Open the Excel files generated after the analysis to view detailed results, including karma, account age, sentiment scores, and more.
+## Reviewing the Analysis
 
-**Example Excel Outputs**
-Below are example outputs generated by the Reddit Scraper & Analyzer, which can be found in the [example_outputs](./example_outputs) directory:
+After the application completes, open the Excel files in the `analysis_results` directory to review the detailed reports. The reports include:
 
-- **User Analysis**: [users_analysis.xlsx](example-outputs/users_analysis.xlsx)
-- **Comment Analysis**: [comment_analysis.xlsx](example-outputs/comment_analysis.xlsx)
-- **Submission Analysis**: [submission_analysis.xlsx](example-outputs/submission_analysis.xlsx)
+- **User Analysis:**  
+  Metrics such as karma, account age, dormant days, etc.
 
-Please download the files to view the detailed analysis results.
+- **Comment Analysis:**  
+  Sentiment scores, named entities, lexical diversity, and duplicate detection.
 
-These Excel sheets offer a clear visualization of the data with various metrics important for identifying suspicious account activities.
+- **Submission Analysis:**  
+  Sentiment, named entities, lexical diversity, and n-gram data extracted from submission titles.
+
+---
 
 ## Troubleshooting
 
-If you encounter any issues with file creation or other aspects of the workflow:
+1. **Module Errors:**  
+   If you encounter module import errors (e.g., for `tqdm`), ensure that you run the application with the correct Python interpreter:
 
-1. Verify the paths in the configuration are correctly set relative to your current working directory.
-2. Check the database connections to ensure they are active and the credentials are accurate.
-3. Ensure each individual module operates correctly by running them separately and reviewing the logs for errors.
-4. Confirm that all required Python packages listed in `requirements.txt` are installed.
+   ```bash
+   python main.py
+   ```
 
-### Creating an Issue
+   Also, verify your environment’s `PYTHONPATH` and consider using a virtual environment.
 
-If the problem persists, please create an **issue** (<https://github.com/YourGitHubUsername/Reddit-Scraper-Analyzer/issues/new>) on GitHub with the following information:
+2. **Database Issues:**  
+   - Ensure that PostgreSQL is running, that the new database tables have been created with the updated schema, and that the credentials in `config.json` are correct.
+   - If you previously used an older version of this tool, you may need to drop your old tables and re-run the updated create-tables script (see above).
 
-- A clear and descriptive title.
-- A detailed description of the issue, including the step at which the issue arises.
-- The output, logs, or error messages that you receive (if any).
-- Steps to reproduce the issue (if applicable).
-- Any relevant screenshots or example files (please make sure there's no sensitive data).
-- The version of the software or tools you are using, including the Python version.
+3. **Logging:**  
+   Check the log output for error messages or stack traces. If an analysis module isn’t working as expected, try running it individually via the CLI flags.
 
-Our team will review the issue and get back to you with a resolution or further questions.
+4. **Rate Limits:**  
+   The scraper includes a basic rate-limit handler. If you see warnings about sleeping for a certain number of seconds, that’s normal. The script will pause until it can safely make more requests to Reddit’s API.
+
+---
 
 ## Contributing
 
-**Contributions are welcome! If you'd like to contribute to the development of this project, please follow these guidelines:**
+Contributions are welcome! To contribute:
+1. Fork the repository.
+2. Create a new branch: `git checkout -b feature-branch`.
+3. Make your changes.
+4. Commit your changes: `git commit -am 'Describe your changes'`.
+5. Push the branch: `git push origin feature-branch`.
+6. Create a pull request on GitHub.
 
-Fork the repository
-Create a new branch (git checkout -b feature-branch)
-Make your changes
-Commit your changes (git commit -am 'Add new feature')
-Push to the branch (git push origin feature-branch)
-Create a new Pull Request
-License
-This project is licensed under the MIT License - see the LICENSE file for details.
+---
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+---
 
 ## Acknowledgements
 
-- [**PRAW:**](https://praw.readthedocs.io/en/stable/index.html) Python Reddit API Wrapper
-- [**NLTK:**](https://www.nltk.org) Natural Language Toolkit for text processing and analysis
-- [**PostgreSQL:**](https://www.postgresql.org) The World's Most Advanced Open Source Relational Database
+- **PRAW:** [https://praw.readthedocs.io/en/stable/](https://praw.readthedocs.io/en/stable/)
+- **NLTK:** [https://www.nltk.org/](https://www.nltk.org/)
+- **PostgreSQL:** [https://www.postgresql.org/](https://www.postgresql.org/)
+- **Openpyxl:** [https://openpyxl.readthedocs.io/](https://openpyxl.readthedocs.io/)
+- **Tqdm:** [https://tqdm.github.io/](https://tqdm.github.io/)

@@ -9,18 +9,25 @@ config.json
 .devcontainer
 .vscode
 submission_data.json
-user_data.json
+redditor_data.json
 potential_bot_accounts.xlsx
 .ipynb_checkpoints
 .sourcery.yaml
 .pre-commit-config.yaml
 pyproject.toml
 debug.log
+app.log
 reddit_moderator_helper.egg-info
 analysis_results/
 model.pkl
 sklearn-env
 nltk_data/
+graph_outputs
+project_graph_creator.py
+python_sys_imports.py
+test/
+tests/
+.vs
 
 
 # C extensions
